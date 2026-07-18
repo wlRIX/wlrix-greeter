@@ -1,0 +1,13 @@
+[package]
+name = "wlrix-greeter"
+version = "0.0.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "wlRIX greetd greeter — IRIX-style login screen for the wlRIX desktop."
+repository = "https://github.com/wlrix/wlrix-greeter"
+publish = false
+
+[dependencies]
+# greetd IPC client + a UI toolkit get added here when login work starts. Kept
+# dependency-free for the initial scaffold so `cargo build` works offline.
+# greetd_ipc = "0.10"
