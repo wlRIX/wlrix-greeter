@@ -12,6 +12,7 @@
 mod greetd;
 mod prompt;
 mod theme;
+mod users;
 mod worker;
 
 use greetd::{Greetd, Outcome, QuestionKind};
