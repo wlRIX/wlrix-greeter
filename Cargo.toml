@@ -8,6 +8,8 @@ repository = "https://github.com/wlrix/wlrix-greeter"
 publish = false
 
 [dependencies]
+greetd_ipc = { version = "0.10.3", default-features = false, features = ["sync-codec"] }
+libc = "0.2.186"
 # greetd IPC client + a UI toolkit get added here when login work starts. Kept
 # dependency-free for the initial scaffold so `cargo build` works offline.
 # greetd_ipc = "0.10"
