@@ -11,6 +11,7 @@
 
 mod greetd;
 mod prompt;
+mod theme;
 
 use greetd::{Greetd, Outcome, QuestionKind};
 
