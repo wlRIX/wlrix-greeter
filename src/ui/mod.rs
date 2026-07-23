@@ -256,6 +256,12 @@ pub fn run(session: Vec<String>, username: Option<String>) -> Result<(), String>
         event_loop
             .dispatch(Duration::from_secs(1), &mut greeter)
             .map_err(|err| format!("event loop failed: {err}"))?;
+        // Paint after every batch of events, rather than waiting on a frame callback.
+        // A login screen redraws on demand -- a click, a keystroke, the caret blink --
+        // and a frame callback only arrives after a commit that requested one, so
+        // gating drawing on it stalls the moment nothing is being drawn. The caret
+        // timer and input both wake this loop, so a change is on screen promptly.
+        greeter.draw_if_dirty();
         if greeter.exit {
             return Ok(());
         }
@@ -496,11 +502,9 @@ impl CompositorHandler for Greeter {
         _t: wayland_client::protocol::wl_output::Transform,
     ) {
     }
-    fn frame(&mut self, _c: &Connection, _qh: &QueueHandle<Self>, surface: &WlSurface, _t: u32) {
-        // Redraw whatever the callback was for, if it changed.
-        if surface == self.window.wl_surface() {
-            self.draw_if_dirty();
-        }
+    fn frame(&mut self, _c: &Connection, _qh: &QueueHandle<Self>, _surface: &WlSurface, _t: u32) {
+        // Drawing is driven from the event loop after each dispatch, not from frame
+        // callbacks -- the greeter never requests one. See the draw call in `run`.
     }
     fn surface_enter(
         &mut self,
