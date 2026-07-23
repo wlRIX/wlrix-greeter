@@ -9,6 +9,7 @@
 // the generator is caught here rather than several stages later.
 #![allow(dead_code)]
 
+pub mod font;
 pub mod palette;
 
 /// A color, packed as native-endian ARGB.

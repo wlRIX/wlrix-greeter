@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 calloop = "0.13"
+fontdue = "0.9.3"
 greetd_ipc = { version = "0.10.3", default-features = false, features = ["sync-codec"] }
 libc = "0.2.186"
 smithay-client-toolkit = "0.19"

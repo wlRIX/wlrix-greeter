@@ -9,14 +9,8 @@
 //! working login before any of the Indigo Magic UI exists; the graphical greeter
 //! replaces [`prompt`] and speaks to the same [`greetd`] underneath.
 
-mod greetd;
-mod prompt;
-mod theme;
-mod ui;
-mod users;
-mod worker;
-
-use greetd::{Greetd, Outcome, QuestionKind};
+use wlrix_greeter::greetd::{Greetd, Outcome, QuestionKind};
+use wlrix_greeter::{prompt, ui};
 
 /// What a successful login starts.
 const DEFAULT_SESSION: &str = "wlrix-session";
