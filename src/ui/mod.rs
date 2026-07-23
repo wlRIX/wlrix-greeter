@@ -32,6 +32,7 @@ use smithay_client_toolkit::{
     output::{OutputHandler, OutputState},
     reexports::calloop::{
         EventLoop, LoopHandle, RegistrationToken,
+        channel::Event as ChannelEvent,
         timer::{TimeoutAction, Timer},
     },
     reexports::calloop_wayland_source::WaylandSource,
@@ -64,12 +65,14 @@ use wayland_client::{
     },
 };
 
+use crate::greetd::{Greetd, QuestionKind};
 use crate::theme::font::Fonts;
 use crate::theme::{Rgb, palette};
 use crate::ui::canvas::Canvas;
 use crate::ui::dialog::{Focus, Model};
 use crate::ui::input::{Action, Input, Key};
 use crate::ui::layout::Geometry;
+use crate::worker::{self, Command, Reply};
 
 /// The dialog's fixed size, in logical pixels.
 const DIALOG_W: u32 = 560;
@@ -87,6 +90,19 @@ struct Backdrop {
     output: WlOutput,
     width: u32,
     height: u32,
+}
+
+/// Where a login attempt has got to. Controls what advancing does and whether input
+/// is accepted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Phase {
+    /// No attempt running. Advancing begins one.
+    PickUser,
+    /// A request is out; greetd has not answered. Input is held off, so a keystroke
+    /// does not land in a field about to be cleared -- PAM can take a second to reply.
+    Waiting,
+    /// A question is outstanding. Advancing answers it.
+    Asking,
 }
 
 /// The greeter's whole UI state.
@@ -111,6 +127,8 @@ pub struct Greeter {
     fonts: Fonts,
     model: Model,
     input: Input,
+    worker: worker::Handle,
+    phase: Phase,
     /// The running scroll-repeat timer, so it can be canceled on release.
     arrow_timer: Option<RegistrationToken>,
 
@@ -120,7 +138,14 @@ pub struct Greeter {
 }
 
 /// Run the graphical greeter until the session starts or the dialog is closed.
-pub fn run() -> Result<(), String> {
+///
+/// `session` is what a successful login starts, and `username` pre-fills the field when
+/// greetd named a user for us.
+pub fn run(session: Vec<String>, username: Option<String>) -> Result<(), String> {
+    // Connect to greetd first: a greeter that cannot authenticate is not worth showing,
+    // and this fails the same way the terminal face does, before any window or font.
+    let greetd = Greetd::connect()?;
+
     let fonts = Fonts::load()?;
     eprintln!("wlrix-greeter: drawing with {}", fonts.family());
 
@@ -154,9 +179,16 @@ pub fn run() -> Result<(), String> {
     window.set_max_size(Some((DIALOG_W, DIALOG_H)));
     window.commit();
 
-    // Real users would come from `users::list()`; the interaction stage runs on a fixed
-    // list until greetd is wired in, so a screenshot has something to show.
-    let model = Model::new(crate::users::list());
+    let mut model = Model::new(crate::users::list());
+    // A named user pre-fills the field, ready to advance.
+    if let Some(name) = &username {
+        model.username = name.clone();
+        model.focus = Focus::Username;
+    }
+
+    // The greetd conversation runs on its own thread; its replies arrive on a channel
+    // the loop waits on, so a slow PAM never freezes the screen.
+    let (worker, replies) = worker::spawn(greetd, session);
 
     let mut greeter = Greeter {
         registry_state: RegistryState::new(&globals),
@@ -176,6 +208,8 @@ pub fn run() -> Result<(), String> {
         fonts,
         model,
         input: Input::default(),
+        worker,
+        phase: Phase::PickUser,
         arrow_timer: None,
         dirty: true,
         exit: false,
@@ -185,6 +219,16 @@ pub fn run() -> Result<(), String> {
         .insert(loop_handle.clone())
         .map_err(|err| format!("could not drive Wayland from the loop: {err}"))?;
 
+    loop_handle
+        .insert_source(replies, |event, _, greeter| {
+            match event {
+                ChannelEvent::Msg(reply) => greeter.on_reply(reply),
+                // The worker thread ended; nothing more will come.
+                ChannelEvent::Closed => greeter.exit = true,
+            }
+        })
+        .map_err(|err| format!("could not receive greetd replies: {err}"))?;
+
     // The caret blink runs for the life of the greeter, toggling and redrawing.
     loop_handle
         .insert_source(Timer::from_duration(CARET_BLINK), |_, _, greeter| {
@@ -193,6 +237,12 @@ pub fn run() -> Result<(), String> {
             TimeoutAction::ToDuration(CARET_BLINK)
         })
         .map_err(|err| format!("could not start the caret timer: {err}"))?;
+
+    // A named user is logged straight in: send the request now, and the reply drives
+    // the rest as if the button had been pressed.
+    if username.is_some() {
+        greeter.submit();
+    }
 
     // Backdrops depend on the output list, which the loop delivers; build any that are
     // known already, and `new_output` covers the rest.
@@ -315,27 +365,76 @@ impl Greeter {
         }
     }
 
-    /// Attempt a login with the current username.
+    /// Advance the login: begin an attempt, or answer the outstanding question.
     ///
-    /// S6 stand-in: with no greetd yet, this reveals a password field the first time and
-    /// reports a would-be login the second, so the whole interaction -- field reveal,
-    /// focus change, masking, message -- can be exercised. Wiring to the worker in the
-    /// next stage replaces this body; the callers do not change.
+    /// The greeter never decides whether a password is wanted -- it asks greetd to begin
+    /// and waits. A password field appears only when [`Self::on_reply`] receives a
+    /// question, never here.
     fn submit(&mut self) {
-        let username = self.model.username.trim().to_string();
-        if username.is_empty() {
-            return;
-        }
-        if self.model.password.is_none() {
-            self.model.password = Some(String::new());
-            self.model.focus = Focus::Password;
-            self.model.message = None;
-        } else {
-            self.model.message = Some(format!("(stand-in) would log in as {username}"));
-            self.model.password = None;
-            self.model.focus = Focus::Username;
+        match self.phase {
+            Phase::PickUser => {
+                let username = self.model.username.trim().to_string();
+                if username.is_empty() {
+                    return;
+                }
+                self.model.message = None;
+                self.phase = Phase::Waiting;
+                self.worker.send(Command::Begin { username });
+            }
+            Phase::Asking => {
+                let answer = self.model.password.clone().unwrap_or_default();
+                self.phase = Phase::Waiting;
+                self.worker.send(Command::Answer(answer));
+            }
+            // A request is already out; ignore until greetd answers.
+            Phase::Waiting => {}
         }
         self.request_redraw();
+    }
+
+    /// Act on what the greetd conversation said.
+    fn on_reply(&mut self, reply: Reply) {
+        match reply {
+            Reply::Question(question) => {
+                // A question -- and only a question -- reveals the answer field. Its
+                // kind decides whether the answer is hidden as it is typed.
+                self.model.password = Some(String::new());
+                self.model.password_secret = question.kind == QuestionKind::Secret;
+                self.model.focus = Focus::Password;
+                self.model.message = None;
+                self.phase = Phase::Asking;
+            }
+            Reply::Notice(text) => {
+                // Shown, but the worker answers PAM itself and carries on, so the phase
+                // does not change.
+                self.model.message = Some(text);
+            }
+            Reply::Started => {
+                // The session is running. greetd tears the greeter down, but exit
+                // cleanly in case it does not get to.
+                self.exit = true;
+            }
+            Reply::Denied(reason) => {
+                // Back to the start, keeping the username so it can be tried again. The
+                // answer field and its contents are dropped.
+                self.model.message = Some(reason);
+                self.model.password = None;
+                self.model.focus = Focus::Username;
+                self.phase = Phase::PickUser;
+            }
+            Reply::Broken(err) => {
+                self.model.message = Some(format!("greetd error: {err}"));
+                self.model.password = None;
+                self.phase = Phase::PickUser;
+            }
+        }
+        self.request_redraw();
+    }
+
+    /// Whether input should be acted on. A request in flight holds it off, so a
+    /// keystroke does not edit a field about to be replaced.
+    fn accepts_input(&self) -> bool {
+        self.phase != Phase::Waiting
     }
 
     /// Start (or restart) the scroll-arrow auto-repeat.
@@ -549,6 +648,9 @@ impl KeyboardHandler for Greeter {
         _serial: u32,
         event: KeyEvent,
     ) {
+        if !self.accepts_input() {
+            return;
+        }
         let key = match event.keysym {
             Keysym::Return | Keysym::KP_Enter => Key::Enter,
             Keysym::BackSpace => Key::Backspace,
@@ -603,7 +705,9 @@ impl PointerHandler for Greeter {
             let (x, y) = (event.position.0 as i32, event.position.1 as i32);
             let g = self.geometry();
             match event.kind {
-                PointerEventKind::Press { button, time, .. } if button == BTN_LEFT => {
+                PointerEventKind::Press { button, time, .. }
+                    if button == BTN_LEFT && self.accepts_input() =>
+                {
                     let action = input::press(&mut self.model, &mut self.input, &g, x, y, time);
                     self.perform(action);
                     self.request_redraw();

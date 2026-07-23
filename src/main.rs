@@ -19,16 +19,16 @@ struct Args {
     session: Vec<String>,
     /// Skip asking, for when greetd was told which user this is.
     username: Option<String>,
-    /// Use the graphical face. It cannot complete a login yet, so the terminal face is
-    /// still the default; this becomes the default, with `--text` for the terminal one,
-    /// once the graphical face can log in.
-    graphical: bool,
+    /// Use the terminal face instead of the graphical one. The graphical face is the
+    /// default now that it can log in; the terminal face stays for a VT with no
+    /// compositor, and as a fallback.
+    text: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
     let mut session = vec![DEFAULT_SESSION.to_string()];
     let mut username = None;
-    let mut graphical = false;
+    let mut text = false;
 
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -48,9 +48,8 @@ fn parse_args() -> Result<Args, String> {
                         .ok_or_else(|| "--user needs a name".to_string())?,
                 );
             }
-            // The graphical login screen. Incomplete for now -- brings up the windows
-            // but does not yet log in.
-            "--graphical" => graphical = true,
+            // Fall back to the terminal prompts, for a VT with no compositor.
+            "--text" => text = true,
             "--help" | "-h" => {
                 println!(
                     "wlrix-greeter {}\n\n\
@@ -58,7 +57,7 @@ fn parse_args() -> Result<Args, String> {
                      Usage: wlrix-greeter [options]\n\n\
                      Options:\n  \
                        --user <name>           log this user in without asking who\n  \
-                       --graphical             the graphical login screen (in development)\n  \
+                       --text                  use the terminal prompts, not the graphical screen\n  \
                        --session <command>...  what to start (default: {DEFAULT_SESSION});\n  \
                                                takes the rest of the line\n  \
                        -h, --help              this message",
@@ -73,7 +72,7 @@ fn parse_args() -> Result<Args, String> {
     Ok(Args {
         session,
         username,
-        graphical,
+        text,
     })
 }
 
@@ -86,9 +85,8 @@ fn main() -> std::process::ExitCode {
         }
     };
 
-    if args.graphical {
-        // The skeleton does not speak greetd yet, so it just brings up the windows.
-        return match ui::run() {
+    if !args.text {
+        return match ui::run(args.session, args.username) {
             Ok(()) => std::process::ExitCode::SUCCESS,
             Err(err) => {
                 eprintln!("wlrix-greeter: {err}");

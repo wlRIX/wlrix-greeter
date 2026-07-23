@@ -35,8 +35,11 @@ pub struct Model {
     pub username: String,
     /// The full name shown beside the field.
     pub full_name: Option<String>,
-    /// The password field's contents, `Some` once PAM has asked for one.
+    /// The answer field's contents, `Some` once PAM has asked a question.
     pub password: Option<String>,
+    /// Whether that answer is hidden as it is typed. A password is; a one-time code,
+    /// which PAM asks as a visible question, is not.
+    pub password_secret: bool,
     /// How far the grid is scrolled, in pixels.
     pub scroll_y: i32,
     /// A message shown under the field, e.g. after a wrong password.
@@ -56,6 +59,7 @@ impl Model {
             username: String::new(),
             full_name: None,
             password: None,
+            password_secret: true,
             scroll_y: 0,
             message: None,
             focus: Focus::None,
@@ -234,12 +238,16 @@ fn paint_fields(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mo
 
     // The password field appears only once PAM has asked; its place was reserved.
     if let Some(password) = &model.password {
-        let masked: String = "*".repeat(password.chars().count());
+        let shown = if model.password_secret {
+            "*".repeat(password.chars().count())
+        } else {
+            password.clone()
+        };
         text_field(
             canvas,
             fonts,
             g.password_field,
-            &masked,
+            &shown,
             model.focus == Focus::Password,
             model.caret_on,
         );
