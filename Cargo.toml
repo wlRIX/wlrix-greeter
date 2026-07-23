@@ -11,6 +11,8 @@ publish = false
 calloop = "0.13"
 greetd_ipc = { version = "0.10.3", default-features = false, features = ["sync-codec"] }
 libc = "0.2.186"
+smithay-client-toolkit = "0.19"
+wayland-client = "0.31"
 # greetd IPC client + a UI toolkit get added here when login work starts. Kept
 # dependency-free for the initial scaffold so `cargo build` works offline.
 # greetd_ipc = "0.10"

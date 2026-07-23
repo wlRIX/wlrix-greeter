@@ -12,6 +12,7 @@
 mod greetd;
 mod prompt;
 mod theme;
+mod ui;
 mod users;
 mod worker;
 
@@ -24,11 +25,16 @@ struct Args {
     session: Vec<String>,
     /// Skip asking, for when greetd was told which user this is.
     username: Option<String>,
+    /// Use the graphical face. It cannot complete a login yet, so the terminal face is
+    /// still the default; this becomes the default, with `--text` for the terminal one,
+    /// once the graphical face can log in.
+    graphical: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
     let mut session = vec![DEFAULT_SESSION.to_string()];
     let mut username = None;
+    let mut graphical = false;
 
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -48,6 +54,9 @@ fn parse_args() -> Result<Args, String> {
                         .ok_or_else(|| "--user needs a name".to_string())?,
                 );
             }
+            // The graphical login screen. Incomplete for now -- brings up the windows
+            // but does not yet log in.
+            "--graphical" => graphical = true,
             "--help" | "-h" => {
                 println!(
                     "wlrix-greeter {}\n\n\
@@ -55,6 +64,7 @@ fn parse_args() -> Result<Args, String> {
                      Usage: wlrix-greeter [options]\n\n\
                      Options:\n  \
                        --user <name>           log this user in without asking who\n  \
+                       --graphical             the graphical login screen (in development)\n  \
                        --session <command>...  what to start (default: {DEFAULT_SESSION});\n  \
                                                takes the rest of the line\n  \
                        -h, --help              this message",
@@ -66,7 +76,11 @@ fn parse_args() -> Result<Args, String> {
         }
     }
 
-    Ok(Args { session, username })
+    Ok(Args {
+        session,
+        username,
+        graphical,
+    })
 }
 
 fn main() -> std::process::ExitCode {
@@ -77,6 +91,17 @@ fn main() -> std::process::ExitCode {
             return std::process::ExitCode::from(2);
         }
     };
+
+    if args.graphical {
+        // The skeleton does not speak greetd yet, so it just brings up the windows.
+        return match ui::run() {
+            Ok(()) => std::process::ExitCode::SUCCESS,
+            Err(err) => {
+                eprintln!("wlrix-greeter: {err}");
+                std::process::ExitCode::FAILURE
+            }
+        };
+    }
 
     let mut greetd = match Greetd::connect() {
         Ok(greetd) => greetd,
