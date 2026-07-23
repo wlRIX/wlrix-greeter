@@ -59,7 +59,8 @@ pub enum Reply {
     Started,
     /// Refused; the attempt is over and another may begin.
     Denied(String),
-    /// The socket or greetd itself failed. Nothing further will arrive.
+    /// An attempt failed at the greetd level (not a wrong password -- that is `Denied`).
+    /// Recoverable: the greeter shows it and returns to the start. The worker stays.
     Broken(String),
 }
 
@@ -97,19 +98,24 @@ fn run(
     inbox: mpsc::Receiver<Command>,
     replies: Sender<Reply>,
 ) {
-    // Whether an attempt is part-way through, so a second `Begin` knows to abandon it.
-    // greetd allows one at a time, and would refuse the new one otherwise.
+    // Whether an attempt is part-way through.
     let mut live = false;
+    // Whether any attempt has reached greetd. A later `Begin` clears greetd's state
+    // first; the first one has nothing to clear, so a clean login stays a single round
+    // trip.
+    let mut attempted = false;
 
     while let Ok(next) = inbox.recv() {
         let step = match next {
             Command::Begin { username } => {
-                if live && greetd.cancel().is_err() {
-                    let _ = replies.send(Reply::Broken(
-                        "could not abandon the previous attempt".to_string(),
-                    ));
-                    return;
+                // On a retry, clear whatever greetd was holding before starting fresh: a
+                // rejection does not always leave it ready for a new `CreateSession`, and
+                // cancelling nothing is harmless. This is what lets a login be tried
+                // again after a wrong password.
+                if attempted {
+                    let _ = greetd.cancel();
                 }
+                attempted = true;
                 greetd.create_session(&username, &command)
             }
             Command::Answer(text) => {
@@ -131,8 +137,13 @@ fn run(
         match step {
             Ok(step) => live = pump(&mut greetd, step, &replies),
             Err(err) => {
+                // The attempt failed at the greetd level -- a bad user, a busy greetd, a
+                // transient hiccup. Report it and carry on: the worker outlives a single
+                // failed attempt, so the greeter can try again rather than being left
+                // with a dead channel. A genuinely lost socket simply fails every later
+                // command the same way, which the greeter shows without vanishing.
                 let _ = replies.send(Reply::Broken(err));
-                return;
+                live = false;
             }
         }
     }
@@ -297,5 +308,86 @@ mod tests {
         let shown = format!("{:?}", Command::Answer("hunter2".to_string()));
         assert!(!shown.contains("hunter2"), "the answer leaked: {shown}");
         assert!(shown.contains("redacted"));
+    }
+
+    #[test]
+    fn a_rejected_attempt_can_be_retried() {
+        // The KVM crash: pick a user, submit a blank password, get rejected, then try
+        // again. The worker must survive the rejection and produce a fresh question --
+        // not die and leave the greeter with a dead channel.
+        let (greetd, server) = scripted(
+            vec![
+                // First attempt: password asked, then rejected.
+                Response::AuthMessage {
+                    auth_message_type: AuthMessageType::Secret,
+                    auth_message: "Password: ".to_string(),
+                },
+                Response::Error {
+                    error_type: greetd_ipc::ErrorType::AuthError,
+                    description: "Login incorrect".to_string(),
+                },
+                // Retry: the worker cancels first, then creates a new session.
+                Response::Success, // reply to CancelSession
+                Response::AuthMessage {
+                    auth_message_type: AuthMessageType::Secret,
+                    auth_message: "Password: ".to_string(),
+                },
+            ],
+            Duration::ZERO,
+        );
+        let (handle, mut replies) = spawn(greetd, vec!["wlrix-session".to_string()]);
+
+        handle.send(Command::Begin {
+            username: "vic485".to_string(),
+        });
+        assert!(matches!(recv(&mut replies), Reply::Question(_)));
+        handle.send(Command::Answer(String::new()));
+        assert!(matches!(recv(&mut replies), Reply::Denied(_)));
+
+        // The retry -- this is what crashed before.
+        handle.send(Command::Begin {
+            username: "vic485".to_string(),
+        });
+        assert!(
+            matches!(recv(&mut replies), Reply::Question(_)),
+            "a retry after a rejection must ask for the password again"
+        );
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn a_greetd_error_does_not_kill_the_worker() {
+        // A generic greetd error on one attempt is reported but must not end the worker,
+        // or the greeter's reply channel closes and it vanishes.
+        let (greetd, server) = scripted(
+            vec![
+                Response::Error {
+                    error_type: greetd_ipc::ErrorType::Error,
+                    description: "greetd is busy".to_string(),
+                },
+                // The worker is still alive to serve a second attempt: cancel, then a
+                // session that succeeds outright (a passwordless account).
+                Response::Success, // reply to CancelSession
+                Response::Success, // CreateSession -> straight to success
+                Response::Success, // StartSession
+            ],
+            Duration::ZERO,
+        );
+        let (handle, mut replies) = spawn(greetd, vec!["wlrix-session".to_string()]);
+
+        handle.send(Command::Begin {
+            username: "bad".to_string(),
+        });
+        assert!(matches!(recv(&mut replies), Reply::Broken(_)));
+
+        // The worker survived: a second attempt still gets through.
+        handle.send(Command::Begin {
+            username: "guest".to_string(),
+        });
+        assert!(
+            matches!(recv(&mut replies), Reply::Started),
+            "the worker must outlive a failed attempt"
+        );
+        server.join().unwrap();
     }
 }

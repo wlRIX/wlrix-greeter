@@ -223,8 +223,16 @@ pub fn run(session: Vec<String>, username: Option<String>) -> Result<(), String>
         .insert_source(replies, |event, _, greeter| {
             match event {
                 ChannelEvent::Msg(reply) => greeter.on_reply(reply),
-                // The worker thread ended; nothing more will come.
-                ChannelEvent::Closed => greeter.exit = true,
+                // The worker thread is gone. That should not happen while the greeter is
+                // still up, so show it rather than vanishing to a bare desktop -- a
+                // greeter that disappears strands whoever is at the keyboard.
+                ChannelEvent::Closed => {
+                    if !greeter.exit {
+                        greeter.model.message = Some("lost the connection to greetd".to_string());
+                        greeter.phase = Phase::PickUser;
+                        greeter.request_redraw();
+                    }
+                }
             }
         })
         .map_err(|err| format!("could not receive greetd replies: {err}"))?;
