@@ -11,7 +11,7 @@
 //! what lets the same interaction serve the greeter and, until greetd is wired in, a
 //! local stand-in.
 
-use crate::ui::dialog::{Focus, Model};
+use crate::ui::dialog::{Button, Focus, Model};
 use crate::ui::layout::{Geometry, Widget};
 
 /// How close together two clicks on one icon count as a double-click.
@@ -52,7 +52,18 @@ pub fn press(
 ) -> Action {
     input.pointer = (x, y);
     let count = model.users.len();
-    match g.hit(x, y, count, model.scroll_y, model.password.is_some()) {
+    match g.hit(
+        x,
+        y,
+        count,
+        model.scroll_y,
+        model.password.is_some(),
+        model.error.is_some(),
+    ) {
+        Widget::ErrorOk => {
+            model.armed = Some(Button::ErrorOk);
+            Action::None
+        }
         Widget::Icon(index) => {
             let double = matches!(input.last_click, Some((t, i)) if i == index && time - t <= DOUBLE_CLICK_MS);
             select(model, index);
@@ -91,14 +102,35 @@ pub fn press(
             input.thumb_grab = Some(y - thumb.top());
             Action::None
         }
-        Widget::LoginButton => advance_if_ready(model),
-        Widget::HelpButton | Widget::None => Action::None,
+        Widget::LoginButton => {
+            model.armed = Some(Button::Login);
+            Action::None
+        }
+        Widget::HelpButton => {
+            model.armed = Some(Button::Help);
+            Action::None
+        }
+        Widget::None => Action::None,
     }
 }
 
 /// The pointer button came back up.
-pub fn release(input: &mut Input) {
+///
+/// A button fires now, not on press, and only if the pointer is still over the one that
+/// was armed -- so a press begun and dragged off is canceled, the Motif way.
+pub fn release(model: &mut Model, input: &mut Input, g: &Geometry, x: i32, y: i32) -> Action {
     input.thumb_grab = None;
+    let armed = model.armed.take();
+    match armed {
+        Some(Button::Login) if g.login_button.contains(x, y) => advance_if_ready(model),
+        Some(Button::ErrorOk) if g.error_ok.contains(x, y) => {
+            dismiss_error(model);
+            Action::None
+        }
+        // Help has no behavior yet; a released Login off the button, or any Help, does
+        // nothing beyond un-arming.
+        _ => Action::None,
+    }
 }
 
 /// The pointer moved to `(x, y)`.
@@ -131,6 +163,14 @@ pub fn repeat_arrow(model: &mut Model, g: &Geometry, up: bool) -> bool {
 /// A key producing `text` (its UTF-8, if any) with keysym name `enter`/`backspace`
 /// flagged by the caller was pressed. Returns any resulting action.
 pub fn key(model: &mut Model, key: Key) -> Action {
+    // A modal error swallows the keyboard: Enter or Space dismisses it, nothing else
+    // reaches the fields behind it.
+    if model.error.is_some() {
+        if matches!(key, Key::Enter | Key::Text(_)) {
+            dismiss_error(model);
+        }
+        return Action::None;
+    }
     match key {
         Key::Enter => advance_if_ready(model),
         Key::Backspace => {
@@ -181,6 +221,18 @@ pub enum Key {
     Tab,
     Text(String),
     Other,
+}
+
+/// Clear the error dialog and reset to the initial screen: fields empty, no user
+/// selected. Matches IRIX, which starts over after a failed login.
+fn dismiss_error(model: &mut Model) {
+    model.error = None;
+    model.username.clear();
+    model.password = None;
+    model.full_name = None;
+    model.selected = None;
+    model.focus = Focus::None;
+    model.message = None;
 }
 
 /// Choose user `index`: fill the field from it and highlight it.
@@ -343,6 +395,68 @@ mod tests {
         assert_eq!(m.scroll_y, 0, "cannot scroll above the top");
         scroll_by(&mut m, &g, 100_000);
         assert_eq!(m.scroll_y, g.max_scroll(m.users.len()));
+    }
+
+    #[test]
+    fn the_login_button_arms_on_press_and_fires_on_release() {
+        let (mut m, g, mut input) = (model(), geometry(), Input::default());
+        m.username = "root".to_string();
+        let b = g.login_button;
+        // Press arms it but does not fire.
+        assert_eq!(
+            press(&mut m, &mut input, &g, b.x + 2, b.y + 2, 10),
+            Action::None
+        );
+        assert_eq!(m.armed, Some(Button::Login));
+        // Release over it fires.
+        assert_eq!(
+            release(&mut m, &mut input, &g, b.x + 2, b.y + 2),
+            Action::Advance
+        );
+        assert_eq!(m.armed, None);
+    }
+
+    #[test]
+    fn a_press_released_off_the_button_does_not_fire() {
+        let (mut m, g, mut input) = (model(), geometry(), Input::default());
+        m.username = "root".to_string();
+        let b = g.login_button;
+        press(&mut m, &mut input, &g, b.x + 2, b.y + 2, 10);
+        // Released away from the button: canceled, and it un-arms.
+        assert_eq!(release(&mut m, &mut input, &g, 0, 0), Action::None);
+        assert_eq!(m.armed, None);
+    }
+
+    #[test]
+    fn the_error_dialog_is_modal() {
+        let (mut m, g, mut input) = (model(), geometry(), Input::default());
+        m.error = Some("Cannot log in to this account.".to_string());
+        m.username = "root".to_string();
+        m.selected = Some(0);
+        // A click on an icon behind the dialog does nothing.
+        let cell = g.cell(0, 0);
+        press(&mut m, &mut input, &g, cell.x + 5, cell.y + 5, 10);
+        assert!(m.error.is_some(), "input behind a modal error is ignored");
+        assert_eq!(m.selected, Some(0));
+
+        // OK dismisses it and resets to the initial screen.
+        let ok = g.error_ok;
+        press(&mut m, &mut input, &g, ok.x + 2, ok.y + 2, 20);
+        release(&mut m, &mut input, &g, ok.x + 2, ok.y + 2);
+        assert!(m.error.is_none());
+        assert_eq!(m.username, "");
+        assert_eq!(m.selected, None);
+        assert_eq!(m.focus, Focus::None);
+    }
+
+    #[test]
+    fn enter_dismisses_the_error() {
+        let mut m = model();
+        m.error = Some("Cannot log in to this account.".to_string());
+        m.username = "root".to_string();
+        key(&mut m, Key::Enter);
+        assert!(m.error.is_none());
+        assert_eq!(m.username, "");
     }
 }
 

@@ -9,6 +9,7 @@
 //! Interaction is a later stage. This draws whatever the model says, including a
 //! selection and a shown password field, so the preview can exercise those states.
 
+use crate::theme::Rgb;
 use crate::theme::font::{Face, Fonts, Run};
 use crate::theme::palette::{self, metrics};
 use crate::ui::canvas::{Canvas, Rect};
@@ -23,6 +24,15 @@ pub enum Focus {
     None,
     Username,
     Password,
+}
+
+/// A pushable button, tracked while held so it can be drawn pressed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Button {
+    Login,
+    Help,
+    /// The OK button of the error dialog.
+    ErrorOk,
 }
 
 /// Everything drawing needs to know. Interaction fills this in; the preview hard-codes
@@ -48,6 +58,10 @@ pub struct Model {
     pub focus: Focus,
     /// Whether the caret is in its visible half of the blink.
     pub caret_on: bool,
+    /// A button currently held down, drawn pressed.
+    pub armed: Option<Button>,
+    /// A modal error, shown as a dialog over everything until dismissed.
+    pub error: Option<String>,
 }
 
 impl Model {
@@ -64,6 +78,8 @@ impl Model {
             message: None,
             focus: Focus::None,
             caret_on: false,
+            armed: None,
+            error: None,
         }
     }
 }
@@ -94,7 +110,102 @@ pub fn paint(canvas: &mut Canvas, fonts: &mut Fonts, model: &Model) {
     paint_list(canvas, fonts, &g, model);
     paint_scrollbar(canvas, &g, model);
     paint_fields(canvas, fonts, &g, model);
-    paint_footer(canvas, fonts, &g);
+    paint_footer(canvas, fonts, &g, model);
+
+    // The error dialog goes on top of everything, modal.
+    if let Some(message) = &model.error {
+        paint_error(
+            canvas,
+            fonts,
+            &g,
+            message,
+            model.armed == Some(Button::ErrorOk),
+        );
+    }
+}
+
+/// The modal "cannot log in" box: a raised panel with a red prohibition icon, the
+/// message, and an OK button.
+fn paint_error(
+    canvas: &mut Canvas,
+    fonts: &mut Fonts,
+    g: &Geometry,
+    message: &str,
+    ok_pressed: bool,
+) {
+    motif::panel(
+        canvas,
+        g.error_box,
+        palette::PANEL,
+        Bevel::raised(
+            palette::PANEL_TOP_SHADOW,
+            palette::PANEL_BOTTOM_SHADOW,
+            metrics::SHADOW_DEFAULT,
+        ),
+    );
+    motif::outline(canvas, g.error_box, palette::OUTER_LINE);
+
+    prohibition_icon(canvas, g.error_icon);
+
+    // The message in a sunken read-only field, one line per `\n`.
+    motif::panel(
+        canvas,
+        g.error_text,
+        palette::PANEL,
+        Bevel::sunken(
+            palette::PANEL_TOP_SHADOW,
+            palette::PANEL_BOTTOM_SHADOW,
+            metrics::SHADOW_DEFAULT,
+        ),
+    );
+    let line_h = fonts.line_height(Face::Regular, NAME_PX);
+    let mut baseline = g.error_text.top() + fonts.ascent(Face::Regular, NAME_PX) + 4;
+    for line in message.lines() {
+        fonts.draw(
+            canvas,
+            Run {
+                face: Face::Regular,
+                px: NAME_PX,
+                x: g.error_text.left() + metrics::TEXT_MARGIN_WIDTH,
+                baseline,
+                colour: palette::FOREGROUND,
+            },
+            line,
+        );
+        baseline += line_h;
+    }
+
+    button(canvas, fonts, g.error_ok, "OK", ok_pressed);
+}
+
+/// A red square with a white prohibition symbol -- the circle and bar of "no entry".
+fn prohibition_icon(canvas: &mut Canvas, rect: Rect) {
+    const RED: Rgb = Rgb(0xff_e00000);
+    const WHITE: Rgb = Rgb(0xff_ffffff);
+    canvas.fill_rect(rect, RED);
+    canvas.stroke_rect(rect, palette::OUTER_LINE);
+
+    let cx = rect.x + rect.w / 2;
+    let cy = rect.y + rect.h / 2;
+    let r = rect.w / 2 - 8;
+
+    // A thick white ring: the band between two radii.
+    let outer = r * r;
+    let inner = (r - 4).max(0) * (r - 4).max(0);
+    for dy in -r..=r {
+        for dx in -r..=r {
+            let d = dx * dx + dy * dy;
+            if d <= outer && d >= inner {
+                canvas.put(cx + dx, cy + dy, WHITE);
+            }
+        }
+    }
+    // The diagonal bar across it (top-left to bottom-right), a few pixels thick.
+    for t in -r..=r {
+        for w in -1..=1 {
+            canvas.put(cx + t, cy + t + w, WHITE);
+        }
+    }
 }
 
 /// The sunken panel and the icon grid inside it.
@@ -324,8 +435,8 @@ fn text_field(
     }
 }
 
-/// The `IRIX` wordmark and the two buttons.
-fn paint_footer(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry) {
+/// The `wlRIX` wordmark and the two buttons.
+fn paint_footer(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Model) {
     // The gray italic wordmark, baseline-aligned with the buttons.
     let baseline = g.wordmark.top() + (g.wordmark.h + fonts.ascent(Face::Italic, WORDMARK_PX)) / 2;
     fonts.draw(
@@ -337,28 +448,55 @@ fn paint_footer(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry) {
             baseline,
             colour: palette::PANEL_BOTTOM_SHADOW,
         },
-        "IRIX",
+        "wlRIX",
     );
 
-    button(canvas, fonts, g.login_button, "Log In");
-    button(canvas, fonts, g.help_button, "Help");
+    button(
+        canvas,
+        fonts,
+        g.login_button,
+        "Log In",
+        model.armed == Some(Button::Login),
+    );
+    button(
+        canvas,
+        fonts,
+        g.help_button,
+        "Help",
+        model.armed == Some(Button::Help),
+    );
 }
 
-/// A raised button with a centred label.
-fn button(canvas: &mut Canvas, fonts: &mut Fonts, rect: Rect, label: &str) {
-    motif::panel(
-        canvas,
-        rect,
-        palette::FACE,
-        Bevel::raised(
-            palette::FACE_TOP_SHADOW,
-            palette::FACE_BOTTOM_SHADOW,
-            metrics::SHADOW_DEFAULT,
-        ),
-    );
+/// A button with a centred label, raised or -- while held -- pressed in.
+///
+/// A pressed button swaps to a sunken bevel and the darker `armed` face, and its label
+/// shifts a pixel down and right, so it reads as physically pushed.
+fn button(canvas: &mut Canvas, fonts: &mut Fonts, rect: Rect, label: &str, pressed: bool) {
+    let (fill, bevel) = if pressed {
+        (
+            palette::ARMED,
+            Bevel::sunken(
+                palette::FACE_TOP_SHADOW,
+                palette::FACE_BOTTOM_SHADOW,
+                metrics::SHADOW_DEFAULT,
+            ),
+        )
+    } else {
+        (
+            palette::FACE,
+            Bevel::raised(
+                palette::FACE_TOP_SHADOW,
+                palette::FACE_BOTTOM_SHADOW,
+                metrics::SHADOW_DEFAULT,
+            ),
+        )
+    };
+    motif::panel(canvas, rect, fill, bevel);
+
+    let nudge = if pressed { 1 } else { 0 };
     let text_w = fonts.width(Face::Regular, 14.0, label);
-    let x = rect.left() + (rect.w - text_w) / 2;
-    let baseline = rect.top() + (rect.h + fonts.ascent(Face::Regular, 14.0)) / 2 - 2;
+    let x = rect.left() + (rect.w - text_w) / 2 + nudge;
+    let baseline = rect.top() + (rect.h + fonts.ascent(Face::Regular, 14.0)) / 2 - 2 + nudge;
     fonts.draw(
         canvas,
         Run {

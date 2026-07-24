@@ -10,12 +10,14 @@
 //!   selected    a user chosen, their full name shown
 //!   typed       a half-typed username with the caret showing
 //!   password    the password field revealed
-//!   denied      a wrong-password message
+//!   denied      a wrong-password message (inline)
+//!   error       the modal "cannot log in" dialog
+//!   pressed     the Log In button held down
 //!
 //! Usage: `cargo run --example paint_preview [state]` under a Wayland compositor.
 //! Not part of the greeter; a dev tool only.
 
-use wlrix_greeter::preview_api::{Focus, Model, User, show};
+use wlrix_greeter::preview_api::{Button, Focus, Model, User, show};
 
 fn user(name: &str, full: Option<&str>, uid: u32) -> User {
     User {
@@ -65,6 +67,16 @@ fn main() {
             model.username = "vic485".to_string();
             model.message = Some("Login incorrect".to_string());
             model.focus = Focus::Username;
+        }
+        Some("error") => {
+            model.selected = Some(1);
+            model.username = "vic485".to_string();
+            model.error = Some("Cannot log in to this account.".to_string());
+        }
+        Some("pressed") => {
+            model.selected = Some(1);
+            model.username = "vic485".to_string();
+            model.armed = Some(Button::Login);
         }
         _ => {}
     }

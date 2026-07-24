@@ -428,16 +428,16 @@ impl Greeter {
                 // cleanly in case it does not get to.
                 self.exit = true;
             }
-            Reply::Denied(reason) => {
-                // Back to the start, keeping the username so it can be tried again. The
-                // answer field and its contents are dropped.
-                self.model.message = Some(reason);
+            Reply::Denied(_) => {
+                // IRIX showed a modal box on a failed login rather than an inline note.
+                // The reason from PAM is deliberately not shown -- "which of username or
+                // password was wrong" is exactly what an attacker wants narrowed down.
+                self.model.error = Some("Cannot log in to this account.".to_string());
                 self.model.password = None;
-                self.model.focus = Focus::Username;
                 self.phase = Phase::PickUser;
             }
             Reply::Broken(err) => {
-                self.model.message = Some(format!("greetd error: {err}"));
+                self.model.error = Some(format!("Cannot log in to this account.\n{err}"));
                 self.model.password = None;
                 self.phase = Phase::PickUser;
             }
@@ -725,8 +725,10 @@ impl PointerHandler for Greeter {
                     self.request_redraw();
                 }
                 PointerEventKind::Release { button, .. } if button == BTN_LEFT => {
-                    input::release(&mut self.input);
+                    let action = input::release(&mut self.model, &mut self.input, &g, x, y);
+                    self.perform(action);
                     self.stop_arrow();
+                    self.request_redraw();
                 }
                 PointerEventKind::Motion { .. } => {
                     input::motion(&mut self.model, &mut self.input, &g, x, y);

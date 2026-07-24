@@ -14,7 +14,7 @@ pub mod worker;
 /// The bits `examples/paint_preview` needs, gathered so the example depends on a small,
 /// named surface rather than the greeter's innards.
 pub mod preview_api {
-    pub use crate::ui::dialog::{Focus, Model};
+    pub use crate::ui::dialog::{Button, Focus, Model};
     pub use crate::ui::preview::show;
     pub use crate::users::User;
 }

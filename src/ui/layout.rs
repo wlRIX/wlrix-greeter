@@ -44,10 +44,16 @@ pub struct Geometry {
     pub full_name: Rect,
     /// The password field's place, drawn only when active.
     pub password_field: Rect,
-    /// The `IRIX` wordmark, bottom-left.
+    /// The `wlRIX` wordmark, bottom-left.
     pub wordmark: Rect,
     pub login_button: Rect,
     pub help_button: Rect,
+
+    /// The modal error dialog and its parts, drawn only when there is an error.
+    pub error_box: Rect,
+    pub error_icon: Rect,
+    pub error_text: Rect,
+    pub error_ok: Rect,
 }
 
 /// A thing in the dialog a pointer can land on.
@@ -63,6 +69,8 @@ pub enum Widget {
     Track,
     LoginButton,
     HelpButton,
+    /// The OK button of the modal error dialog.
+    ErrorOk,
     None,
 }
 
@@ -125,6 +133,37 @@ impl Geometry {
         );
         let grid_viewport = Rect::new(inner.left(), inner.top(), inner.w - SCROLLBAR_W, inner.h);
 
+        // The error dialog: a small box centred over the list. Its size is fixed; only
+        // its position depends on the dialog's, so drawing and hit-testing agree.
+        let (ebw, ebh) = (340, 148);
+        let error_box = Rect::new(
+            grid_viewport.left() + (grid_viewport.w - ebw) / 2,
+            grid_viewport.top() + (grid_viewport.h - ebh) / 2,
+            ebw,
+            ebh,
+        );
+        let epad = 16;
+        let icon_sz = 44;
+        let error_icon = Rect::new(
+            error_box.left() + epad,
+            error_box.top() + epad,
+            icon_sz,
+            icon_sz,
+        );
+        let error_text = Rect::new(
+            error_icon.right() + epad,
+            error_box.top() + epad,
+            error_box.right() - epad - (error_icon.right() + epad),
+            icon_sz,
+        );
+        let (okw, okh) = (54, 28);
+        let error_ok = Rect::new(
+            error_box.left() + (ebw - okw) / 2,
+            error_box.bottom() - epad - okh,
+            okw,
+            okh,
+        );
+
         Self {
             dialog,
             list_panel,
@@ -139,6 +178,10 @@ impl Geometry {
             wordmark,
             login_button,
             help_button,
+            error_box,
+            error_icon,
+            error_text,
+            error_ok,
         }
     }
 
@@ -211,8 +254,24 @@ impl Geometry {
         Rect::new(track.left(), y, track.w, thumb_h)
     }
 
-    /// What a point lands on. `password` is whether that field is currently shown.
-    pub fn hit(&self, x: i32, y: i32, count: usize, scroll_y: i32, password: bool) -> Widget {
+    /// What a point lands on. `password` is whether that field is currently shown, and
+    /// `error` whether the modal error dialog is up -- if so, only its OK button responds.
+    pub fn hit(
+        &self,
+        x: i32,
+        y: i32,
+        count: usize,
+        scroll_y: i32,
+        password: bool,
+        error: bool,
+    ) -> Widget {
+        if error {
+            return if self.error_ok.contains(x, y) {
+                Widget::ErrorOk
+            } else {
+                Widget::None
+            };
+        }
         if let Some(index) = self.icon_at(x, y, count, scroll_y) {
             return Widget::Icon(index);
         }
