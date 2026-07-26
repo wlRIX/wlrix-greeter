@@ -1,6 +1,6 @@
 [package]
 name = "wlrix-greeter"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0-or-later"
 description = "wlRIX greetd greeter — IRIX-style login screen for the wlRIX desktop."
@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 calloop = "0.13"
-fontdue = "0.9.3"
+cosmic-text = "0.12"
 greetd_ipc = { version = "0.10.3", default-features = false, features = ["sync-codec"] }
 libc = "0.2.186"
 smithay-client-toolkit = "0.19"

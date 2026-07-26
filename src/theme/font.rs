@@ -1,22 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Text, rasterized with fontdue.
+//! Text, rasterized with cosmic-text.
 //!
-//! IRIX's `FontPalette` asks for Helvetica, which is proprietary. The nearest free match
-//! is Nimbus Sans, so the greeter looks for that first, then Liberation Sans, then DejaVu
-//! Sans -- resolving each family as a whole so a regular is never paired with another
-//! family's bold. If none is found it says which paths it tried and gives up, because a
-//! login screen that draws no text is worse than one that explains why.
-//!
-//! There is no shaping and no kerning: fontdue does neither, and the Latin labels and
-//! usernames here do not need them. A name in a complex script would render as unshaped
-//! glyphs, which is a known limitation, not a surprise.
+//! IRIX's `FontPalette` asks for Helvetica, which is proprietary. Rather than name a free
+//! stand-in and hope it is installed, the greeter asks cosmic-text for a sans-serif face and
+//! lets it resolve a concrete family from the system font database. The reason for cosmic-text
+//! over a single loaded face is **fallback and shaping**: a full name in Japanese (or any
+//! script the primary family lacks) renders through the system's CJK font instead of as
+//! missing-glyph boxes, and shaping gives correct kerning and complex-script layout. The old
+//! fontdue path did neither, so non-Latin names came out blank.
 
 use std::collections::HashMap;
 
-use fontdue::{Font, FontSettings, Metrics};
+use cosmic_text::{
+    Attrs, Buffer, Color, Family, FontSystem, Metrics, Shaping, Style, SwashCache, Weight,
+};
 
 use crate::theme::Rgb;
 use crate::ui::canvas::Canvas;
+
+/// Line height as a multiple of the font size -- typical sans leading, used when a face's own
+/// metrics are unavailable.
+const LINE_FACTOR: f32 = 1.3;
 
 /// The three faces the login screen uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -27,50 +31,6 @@ pub enum Face {
     Bold,
     /// The full name beside the field, and the `IRIX` wordmark.
     Italic,
-}
-
-/// One font family's three faces, resolved together.
-struct Family {
-    name: &'static str,
-    regular: &'static str,
-    bold: &'static str,
-    italic: &'static str,
-}
-
-/// Where fonts live, and the families to try in order of preference.
-const FONT_DIRS: &[&str] = &[
-    "/usr/share/fonts/gsfonts",
-    "/usr/share/fonts/liberation",
-    "/usr/share/fonts/TTF",
-    "/usr/share/fonts/truetype/liberation",
-    "/usr/share/fonts/truetype/dejavu",
-];
-
-const FAMILIES: &[Family] = &[
-    Family {
-        name: "Nimbus Sans",
-        regular: "NimbusSans-Regular.otf",
-        bold: "NimbusSans-Bold.otf",
-        italic: "NimbusSans-Italic.otf",
-    },
-    Family {
-        name: "Liberation Sans",
-        regular: "LiberationSans-Regular.ttf",
-        bold: "LiberationSans-Bold.ttf",
-        italic: "LiberationSans-Italic.ttf",
-    },
-    Family {
-        name: "DejaVu Sans",
-        regular: "DejaVuSans.ttf",
-        bold: "DejaVuSans-Bold.ttf",
-        italic: "DejaVuSans-Oblique.ttf",
-    },
-];
-
-/// A rasterized glyph, cached.
-struct Glyph {
-    metrics: Metrics,
-    coverage: Vec<u8>,
 }
 
 /// A text run's fixed parameters: which face and size, where, and in what color.
@@ -88,142 +48,213 @@ pub struct Run {
     pub colour: Rgb,
 }
 
-/// The greeter's fonts, with a glyph cache.
+/// A face's vertical metrics at one size: the top-to-baseline distance and the line box.
+#[derive(Clone, Copy)]
+struct LineMetrics {
+    ascent: i32,
+    line_height: i32,
+}
+
+/// The greeter's fonts. Shaping and rasterization go through cosmic-text; vertical metrics are
+/// cached per (face, size) so the per-frame layout code can ask for them freely.
 pub struct Fonts {
-    regular: Font,
-    bold: Font,
-    italic: Font,
-    /// Keyed by face, character and pixel size (as its bit pattern, so it can be
-    /// hashed). Glyphs are rasterized once and reused.
-    cache: HashMap<(Face, char, u32), Glyph>,
-    /// Which family was chosen, for a one-line note at startup.
-    family: &'static str,
+    system: FontSystem,
+    swash: SwashCache,
+    /// Keyed by face and pixel size (as its bit pattern, so it can be hashed).
+    metrics: HashMap<(Face, u32), LineMetrics>,
 }
 
 impl Fonts {
-    /// Load the first available family. Errs, listing what it tried, if none is found.
+    /// Ready cosmic-text over the system font database. Errs, rather than drawing nothing, if
+    /// the system has no fonts at all -- a login screen that explains why beats a blank one.
     pub fn load() -> Result<Self, String> {
-        for family in FAMILIES {
-            let Some(regular) = load_face(family.regular) else {
-                continue;
-            };
-            // A family missing its bold or italic is not used piecemeal; fall through
-            // to the next rather than mixing families mid-word.
-            let (Some(bold), Some(italic)) = (load_face(family.bold), load_face(family.italic))
-            else {
-                continue;
-            };
-            return Ok(Self {
-                regular,
-                bold,
-                italic,
-                cache: HashMap::new(),
-                family: family.name,
-            });
+        let mut system = FontSystem::new();
+        ensure_system_dirs(system.db_mut());
+        if system.db().is_empty() {
+            return Err("no fonts found: cosmic-text's system font database is empty".to_string());
         }
-
-        Err(format!(
-            "no usable font family found; looked for {} in {}",
-            FAMILIES
-                .iter()
-                .map(|f| f.name)
-                .collect::<Vec<_>>()
-                .join(", "),
-            FONT_DIRS.join(", ")
-        ))
+        Ok(Self {
+            system,
+            swash: SwashCache::new(),
+            metrics: HashMap::new(),
+        })
     }
 
-    /// The family in use, for logging.
+    /// What the greeter draws with, for a one-line note at startup.
     pub fn family(&self) -> &str {
-        self.family
+        "system sans-serif (cosmic-text)"
     }
 
-    fn font(&self, face: Face) -> &Font {
-        match face {
-            Face::Regular => &self.regular,
-            Face::Bold => &self.bold,
-            Face::Italic => &self.italic,
-        }
+    /// How many faces cosmic-text found, for the startup log -- a small number means the
+    /// process is not seeing the system font directories.
+    pub fn face_count(&self) -> usize {
+        self.system.db().len()
+    }
+
+    /// Whether `sample` shapes to real glyphs rather than `.notdef` tofu -- i.e. whether the
+    /// font environment can render it. Logged at startup for a script (CJK) the base sans
+    /// lacks, so a login screen full of boxes is diagnosable from the log alone.
+    pub fn can_render(&mut self, sample: &str) -> bool {
+        let buffer = self.shape(Face::Regular, 16.0, sample);
+        buffer
+            .layout_runs()
+            .flat_map(|run| run.glyphs)
+            .all(|glyph| glyph.glyph_id != 0)
     }
 
     /// The distance from the top of a line to the baseline, so callers can turn a box
     /// top into a baseline for [`draw`].
-    pub fn ascent(&self, face: Face, px: f32) -> i32 {
-        self.font(face)
-            .horizontal_line_metrics(px)
-            .map(|m| m.ascent.ceil() as i32)
-            .unwrap_or_else(|| px.ceil() as i32)
+    pub fn ascent(&mut self, face: Face, px: f32) -> i32 {
+        self.line_metrics(face, px).ascent
     }
 
     /// A line's natural height, for spacing rows.
-    pub fn line_height(&self, face: Face, px: f32) -> i32 {
-        self.font(face)
-            .horizontal_line_metrics(px)
-            .map(|m| m.new_line_size.ceil() as i32)
-            .unwrap_or_else(|| (px * 1.2).ceil() as i32)
+    pub fn line_height(&mut self, face: Face, px: f32) -> i32 {
+        self.line_metrics(face, px).line_height
     }
 
     /// How wide `text` is at this face and size, in whole pixels.
     pub fn width(&mut self, face: Face, px: f32, text: &str) -> i32 {
-        let mut pen = 0.0f32;
-        for ch in text.chars() {
-            pen += self.glyph(face, ch, px).metrics.advance_width;
+        if text.is_empty() {
+            return 0;
         }
-        pen.ceil() as i32
+        let buffer = self.shape(face, px, text);
+        buffer
+            .layout_runs()
+            .next()
+            .map(|run| run.line_w.ceil() as i32)
+            .unwrap_or(0)
     }
 
-    /// Draw `text` with the given face, size, position and color.
+    /// Draw `text` with the given face, size, position and color. The run is shaped, then each
+    /// covered pixel is blended onto the canvas at the run's colour -- cosmic-text hands back
+    /// coverage in the alpha channel, which is exactly what [`Canvas::blend`] wants.
     pub fn draw(&mut self, canvas: &mut Canvas, run: Run, text: &str) {
-        let Run {
-            face,
-            px,
-            x,
-            baseline,
-            colour,
-        } = run;
-        let mut pen = x as f32;
-        for ch in text.chars() {
-            // Split the borrow: rasterize (which caches, so needs &mut self) before the
-            // canvas write, then read the cached glyph back immutably.
-            let advance = self.glyph(face, ch, px).metrics.advance_width;
-            let glyph = self.glyph(face, ch, px);
-            let m = glyph.metrics;
-
-            let gx = pen.round() as i32 + m.xmin;
-            // ymin is measured up from the baseline, so the bitmap's top is the baseline
-            // minus the glyph's height and its below-baseline part.
-            let gy = baseline - m.height as i32 - m.ymin;
-
-            for row in 0..m.height {
-                for col in 0..m.width {
-                    let coverage = glyph.coverage[row * m.width + col];
-                    canvas.blend(gx + col as i32, gy + row as i32, colour, coverage);
-                }
-            }
-            pen += advance;
+        if text.is_empty() {
+            return;
         }
+        let buffer = self.shape(run.face, run.px, text);
+        // Place the buffer so its baseline lands on `run.baseline`. cosmic-text draws from the
+        // buffer top; the first line's baseline sits `line_y` below it.
+        let baseline = buffer
+            .layout_runs()
+            .next()
+            .map(|line| line.line_y)
+            .unwrap_or(run.px);
+        let dy = run.baseline - baseline.round() as i32;
+        let (r, g, b) = run.colour.channels();
+        let colour = run.colour;
+
+        buffer.draw(
+            &mut self.system,
+            &mut self.swash,
+            Color::rgba(r, g, b, 255),
+            |x, y, w, h, pixel| {
+                let coverage = pixel.a();
+                if coverage == 0 {
+                    return;
+                }
+                for row in 0..h as i32 {
+                    for col in 0..w as i32 {
+                        canvas.blend(run.x + x + col, dy + y + row, colour, coverage);
+                    }
+                }
+            },
+        );
     }
 
-    /// Rasterize a glyph, caching it.
-    fn glyph(&mut self, face: Face, ch: char, px: f32) -> &Glyph {
-        let key = (face, ch, px.to_bits());
-        if !self.cache.contains_key(&key) {
-            let (metrics, coverage) = self.font(face).rasterize(ch, px);
-            self.cache.insert(key, Glyph { metrics, coverage });
+    /// Vertical metrics for a face at a size, shaped once from a reference string and cached.
+    fn line_metrics(&mut self, face: Face, px: f32) -> LineMetrics {
+        let key = (face, px.to_bits());
+        if let Some(metrics) = self.metrics.get(&key) {
+            return *metrics;
         }
-        &self.cache[&key]
+        // A reference with both an ascender and a descender, so the line box is realistic.
+        let buffer = self.shape(face, px, "Ag");
+        let metrics = buffer
+            .layout_runs()
+            .next()
+            .map(|run| LineMetrics {
+                ascent: (run.line_y - run.line_top).ceil() as i32,
+                line_height: run.line_height.ceil() as i32,
+            })
+            .unwrap_or(LineMetrics {
+                ascent: px.ceil() as i32,
+                line_height: (px * LINE_FACTOR).ceil() as i32,
+            });
+        self.metrics.insert(key, metrics);
+        metrics
+    }
+
+    /// Shape one line of `text` into an unwrapped buffer.
+    ///
+    /// cosmic-text keeps the weight/slant when it falls back for an uncovered glyph, so a CJK
+    /// name in the italic full-name face matches a *Latin* italic font (which has no CJK) and
+    /// comes out as `.notdef` tofu -- even though an upright CJK face covers it. When a styled
+    /// shaping leaves any glyph missing, reshape upright in the regular face, which has the
+    /// widest coverage: a readable upright name beats an italic row of boxes. Latin names shape
+    /// cleanly in italic and keep it.
+    fn shape(&mut self, face: Face, px: f32, text: &str) -> Buffer {
+        let buffer = self.shape_with(attrs(face), px, text);
+        if face != Face::Regular && has_missing_glyphs(&buffer) {
+            return self.shape_with(attrs(Face::Regular), px, text);
+        }
+        buffer
+    }
+
+    /// Shape `text` with explicit attributes into an unwrapped buffer.
+    fn shape_with(&mut self, attrs: Attrs, px: f32, text: &str) -> Buffer {
+        let metrics = Metrics::new(px, (px * LINE_FACTOR).ceil());
+        let mut buffer = Buffer::new(&mut self.system, metrics);
+        buffer.set_text(&mut self.system, text, attrs, Shaping::Advanced);
+        buffer.shape_until_scroll(&mut self.system, false);
+        buffer
     }
 }
 
-/// Read one face file from the first directory that has it.
-fn load_face(file: &str) -> Option<Font> {
-    for dir in FONT_DIRS {
-        let path = std::path::Path::new(dir).join(file);
-        if let Ok(bytes) = std::fs::read(&path)
-            && let Ok(font) = Font::from_bytes(bytes, FontSettings::default())
-        {
-            return Some(font);
+/// Whether shaping left any glyph as `.notdef` -- i.e. no font in the fallback chain covered it.
+fn has_missing_glyphs(buffer: &Buffer) -> bool {
+    buffer
+        .layout_runs()
+        .flat_map(|run| run.glyphs)
+        .any(|glyph| glyph.glyph_id == 0)
+}
+
+/// Make sure the standard system font directories are in the database.
+///
+/// cosmic-text's default system scan is fontconfig-driven, and fontconfig resolves its font
+/// directories from the environment -- `HOME`, XDG config, `/etc/fonts`. The greeter runs
+/// before login in a minimal greetd session where that resolution can come up short and drop
+/// directories, most visibly the system CJK font, so a non-Latin full name renders as tofu even
+/// though the font is installed. Loading the well-known directories directly makes the greeter
+/// independent of that. Directories fontconfig already covered are skipped, so faces are not
+/// loaded twice.
+fn ensure_system_dirs(db: &mut cosmic_text::fontdb::Database) {
+    use cosmic_text::fontdb::Source;
+
+    const DIRS: &[&str] = &["/usr/share/fonts", "/usr/local/share/fonts"];
+    for dir in DIRS {
+        let path = std::path::Path::new(dir);
+        if !path.is_dir() {
+            continue;
+        }
+        let already = db.faces().any(|face| match &face.source {
+            Source::File(file) => file.starts_with(path),
+            _ => false,
+        });
+        if !already {
+            db.load_fonts_dir(path);
         }
     }
-    None
+}
+
+/// The cosmic-text attributes for a face: a sans-serif family, plus the weight or slant. The
+/// concrete family (and any per-glyph fallback) is left to cosmic-text's font matching.
+fn attrs(face: Face) -> Attrs<'static> {
+    let base = Attrs::new().family(Family::SansSerif);
+    match face {
+        Face::Regular => base,
+        Face::Bold => base.weight(Weight::BOLD),
+        Face::Italic => base.style(Style::Italic),
+    }
 }

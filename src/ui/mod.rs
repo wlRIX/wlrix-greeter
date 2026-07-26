@@ -146,8 +146,14 @@ pub fn run(session: Vec<String>, username: Option<String>) -> Result<(), String>
     // and this fails the same way the terminal face does, before any window or font.
     let greetd = Greetd::connect()?;
 
-    let fonts = Fonts::load()?;
-    eprintln!("wlrix-greeter: drawing with {}", fonts.family());
+    let mut fonts = Fonts::load()?;
+    let cjk_ok = fonts.can_render("日本語");
+    eprintln!(
+        "wlrix-greeter: drawing with {} ({} faces, cjk sample renders: {})",
+        fonts.family(),
+        fonts.face_count(),
+        cjk_ok
+    );
 
     let conn = Connection::connect_to_env()
         .map_err(|err| format!("no Wayland compositor to connect to: {err}"))?;

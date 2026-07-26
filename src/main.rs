@@ -86,6 +86,12 @@ fn main() -> std::process::ExitCode {
     };
 
     if !args.text {
+        // Send the graphical greeter's stderr to a file first: under greetd it draws over the
+        // console its stderr goes to, so without this a bad run leaves nothing to read. Announce
+        // the path on stdout (still the terminal) so it can be found when run by hand.
+        if let Some(path) = wlrix_greeter::logging::to_file() {
+            println!("wlrix-greeter: logging to {}", path.display());
+        }
         return match ui::run(args.session, args.username) {
             Ok(()) => std::process::ExitCode::SUCCESS,
             Err(err) => {

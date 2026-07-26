@@ -5,6 +5,7 @@
 //! `examples/paint_preview` reach the drawing code to show the dialog without a login.
 
 pub mod greetd;
+pub mod logging;
 pub mod prompt;
 pub mod theme;
 pub mod ui;

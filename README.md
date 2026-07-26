@@ -41,7 +41,7 @@ authenticate against, and it says so rather than presenting a login it cannot co
 vt = 1
 
 [default_session]
-command = "wlrix-greeter"
+command = "wlrix-compositor -c wlrix-greeter"
 user = "greeter"
 ```
 
