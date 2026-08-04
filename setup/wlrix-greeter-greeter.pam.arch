@@ -1,0 +1,16 @@
+#%PAM-1.0
+#
+# The greeter's *own* session: greetd starting wlrix-greeter as the wlrix-greeter system
+# account, before anybody has logged in. Named by `[default_session] service` in
+# wlrix-greeter.toml.
+#
+# Shipped rather than left to greetd's default of `greetd-greeter`, which no distribution is
+# obliged to provide -- Arch's greetd package ships only `greetd`, and PAM's fallback for an
+# unknown service is `other`, which denies everything. The greeter would not start at all.
+
+# No password to check: this is a system account with no login of its own.
+auth       required     pam_permit.so
+
+account    include      system-login
+
+session    include      system-login

@@ -1,0 +1,11 @@
+# The account greetd runs the greeter as. No shell and no password: it exists to own a
+# session before anybody has logged in.
+#
+# `video` is the only group it needs. The compositor opens DRM and input through libseat,
+# which goes by way of logind where there is one and only falls back to seatd otherwise, so
+# neither `seat` nor `login` membership is required -- verified on the KVM, and cosmic-greeter
+# on Arch is set up the same way (`cosmic-greeter : cosmic-greeter video`).
+
+#Type Name          ID GECOS                   Home directory          Shell
+u     wlrix-greeter -  "wlRIX Greeter Account" /var/lib/wlrix-greeter  -
+m     wlrix-greeter video

@@ -1,0 +1,23 @@
+#%PAM-1.0
+#
+# Authenticating whoever is logging in. greetd runs this stack, as root, under the name
+# `[general] service` gives it in wlrix-greeter.toml -- the greeter itself never checks a
+# password. Everything the login needs (pam_limits, pam_env, pam_loginuid, pam_keyinit and
+# pam_systemd, which is what creates XDG_RUNTIME_DIR) comes in with `system-login`.
+#
+# The Debian flavour of this file spells all of that out because Debian's common-* stack does
+# not; see wlrix-greeter.pam.debian.
+
+auth       requisite    pam_nologin.so
+auth       required     pam_succeed_if.so user != root quiet_success
+auth       include      system-login
+# After the include on purpose: the keyring is unlocked with the password the stack above has
+# just collected, so it has to run once there is one.
+auth       optional     pam_gnome_keyring.so
+
+account    include      system-login
+
+password   include      system-login
+
+session    include      system-login
+session    optional     pam_gnome_keyring.so auto_start

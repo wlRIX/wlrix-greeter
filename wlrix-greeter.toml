@@ -1,0 +1,23 @@
+# greetd configuration for the wlRIX greeter.
+#
+# Installed to /etc/greetd/wlrix-greeter.toml. greetd reads /etc/greetd/config.toml by default,
+# so point it here (`greetd -c`, or the ExecStart in a drop-in) rather than having `just
+# install` overwrite a file the administrator owns.
+
+[terminal]
+vt = "1"
+
+[general]
+# The PAM service greetd runs to authenticate whoever is logging in. Without this it would use
+# its own default, `greetd`, and the wlRIX stack -- gnome-keyring included -- would never be
+# consulted. See setup/wlrix-greeter.pam.*.
+service = "wlrix-greeter"
+
+[default_session]
+command = "wlrix-greeter-start"
+user = "wlrix-greeter"
+# The PAM service for the greeter's *own* session, started as the account above before anybody
+# has logged in. greetd's default here is `greetd-greeter`, which no distribution is obliged to
+# ship -- Arch's package does not, and PAM's fallback for an unknown service denies everything,
+# so the greeter would not start. See setup/wlrix-greeter-greeter.pam.*.
+service = "wlrix-greeter-greeter"

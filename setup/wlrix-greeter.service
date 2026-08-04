@@ -1,0 +1,35 @@
+[Unit]
+Description=wlRIX Greeter
+Documentation=https://github.com/wlRIX/wlrix-greeter
+
+After=systemd-user-sessions.service plymouth-quit-wait.service
+# The greeter takes VT 1, which getty would otherwise be holding.
+After=getty@tty1.service
+Conflicts=getty@tty1.service
+# This unit *is* greetd, started against the wlRIX configuration. The distribution's own
+# greetd.service is the same daemon on the same VT and the same socket, so the two cannot
+# both run; saying so lets systemd stop one when the other starts instead of leaving a
+# confusing failure to bind.
+Conflicts=greetd.service
+
+# In [Unit] rather than [Service]: systemd moved them here, and StartLimitInterval became
+# StartLimitIntervalSec. The old spelling is still accepted, but this is where they belong.
+StartLimitBurst=5
+StartLimitIntervalSec=30
+
+[Service]
+Type=simple
+ExecStart=greetd --config /etc/greetd/wlrix-greeter.toml
+IgnoreSIGPIPE=no
+SendSIGHUP=yes
+TimeoutStopSec=30s
+# The greeter's PAM stack runs pam_keyinit and hands off to gnome-keyring; a private keyring
+# per invocation would leave the session's keys somewhere the session cannot reach them.
+KeyringMode=shared
+Restart=always
+RestartSec=1
+
+[Install]
+# What makes `systemctl enable wlrix-greeter` set this as the display manager. graphical.target
+# pulls in display-manager.service, whatever is aliased to it.
+Alias=display-manager.service
