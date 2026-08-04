@@ -11,7 +11,7 @@ prefix := '/usr'
 #
 # Not detected at install time on purpose: a package build stages into DESTDIR on whatever
 # machine the builder happens to be, which says nothing about where the package will land.
-pam-flavor := 'arch'
+pam-flavor := env("PAM_FLAVOR", "arch")
 
 base-dir := absolute_path(clean(rootdir / prefix))
 
