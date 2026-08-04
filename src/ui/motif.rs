@@ -74,8 +74,8 @@ pub fn panel(canvas: &mut Canvas, rect: Rect, fill: Rgb, bevel: Bevel) {
 ///
 /// The dialog's black keyline sits outside the raised bevel, so it is drawn separately
 /// from [`draw`].
-pub fn outline(canvas: &mut Canvas, rect: Rect, colour: Rgb) {
-    canvas.stroke_rect(rect, colour);
+pub fn outline(canvas: &mut Canvas, rect: Rect, color: Rgb) {
+    canvas.stroke_rect(rect, color);
 }
 
 #[cfg(test)]

@@ -43,20 +43,20 @@ impl<'a> Canvas<'a> {
     }
 
     /// Paint every pixel one color.
-    pub fn clear(&mut self, colour: Rgb) {
-        let bytes = colour.0.to_ne_bytes();
+    pub fn clear(&mut self, color: Rgb) {
+        let bytes = color.0.to_ne_bytes();
         for pixel in self.pixels.chunks_exact_mut(4) {
             pixel.copy_from_slice(&bytes);
         }
     }
 
     /// Set one pixel, if it is on the canvas.
-    pub fn put(&mut self, x: i32, y: i32, colour: Rgb) {
+    pub fn put(&mut self, x: i32, y: i32, color: Rgb) {
         if x < 0 || y < 0 || x >= self.width || y >= self.height {
             return;
         }
         let offset = ((y * self.width + x) * 4) as usize;
-        self.pixels[offset..offset + 4].copy_from_slice(&colour.0.to_ne_bytes());
+        self.pixels[offset..offset + 4].copy_from_slice(&color.0.to_ne_bytes());
     }
 
     /// Read one pixel. Off-canvas reads as opaque black, which callers never rely on --
@@ -76,35 +76,35 @@ impl<'a> Canvas<'a> {
     }
 
     /// Fill a rectangle, clipped to the canvas.
-    pub fn fill_rect(&mut self, rect: Rect, colour: Rgb) {
+    pub fn fill_rect(&mut self, rect: Rect, color: Rgb) {
         let clipped = rect.intersect(self.bounds());
         for y in clipped.top()..clipped.bottom() {
             for x in clipped.left()..clipped.right() {
-                self.put(x, y, colour);
+                self.put(x, y, color);
             }
         }
     }
 
     /// A one-pixel outline just inside `rect`.
-    pub fn stroke_rect(&mut self, rect: Rect, colour: Rgb) {
+    pub fn stroke_rect(&mut self, rect: Rect, color: Rgb) {
         if rect.w <= 0 || rect.h <= 0 {
             return;
         }
-        self.fill_rect(Rect::new(rect.x, rect.y, rect.w, 1), colour);
-        self.fill_rect(Rect::new(rect.x, rect.bottom() - 1, rect.w, 1), colour);
-        self.fill_rect(Rect::new(rect.x, rect.y, 1, rect.h), colour);
-        self.fill_rect(Rect::new(rect.right() - 1, rect.y, 1, rect.h), colour);
+        self.fill_rect(Rect::new(rect.x, rect.y, rect.w, 1), color);
+        self.fill_rect(Rect::new(rect.x, rect.bottom() - 1, rect.w, 1), color);
+        self.fill_rect(Rect::new(rect.x, rect.y, 1, rect.h), color);
+        self.fill_rect(Rect::new(rect.right() - 1, rect.y, 1, rect.h), color);
     }
 
     /// Blend `color` over one pixel by `coverage` (0 = leave alone, 255 = opaque).
     ///
     /// This is the text path: a glyph is an 8-bit coverage bitmap, laid over whatever the
     /// background already is.
-    pub fn blend(&mut self, x: i32, y: i32, colour: Rgb, coverage: u8) {
+    pub fn blend(&mut self, x: i32, y: i32, color: Rgb, coverage: u8) {
         if coverage == 0 {
             return;
         }
-        let mixed = self.get(x, y).blend(colour, coverage);
+        let mixed = self.get(x, y).blend(color, coverage);
         self.put(x, y, mixed);
     }
 }

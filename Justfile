@@ -11,7 +11,7 @@ prefix := '/usr'
 #
 # Not detected at install time on purpose: a package build stages into DESTDIR on whatever
 # machine the builder happens to be, which says nothing about where the package will land.
-pam-flavour := 'arch'
+pam-flavor := 'arch'
 
 base-dir := absolute_path(clean(rootdir / prefix))
 
@@ -39,9 +39,9 @@ start-src := name + '-start.sh'
 start-dst := bin-dir / name + '-start'
 
 # The stack that authenticates whoever logs in, and the one for the greeter's own session.
-pam-src := 'setup' / name + '.pam.' + pam-flavour
+pam-src := 'setup' / name + '.pam.' + pam-flavor
 pam-dst := etc-dir / 'pam.d' / name
-greeter-pam-src := 'setup' / name + '-greeter.pam.' + pam-flavour
+greeter-pam-src := 'setup' / name + '-greeter.pam.' + pam-flavor
 greeter-pam-dst := etc-dir / 'pam.d' / name + '-greeter'
 
 greetd-src := name + '.toml'
@@ -101,7 +101,7 @@ install:
       echo "installed $f"
   done
   echo
-  echo "PAM stack: {{pam-flavour}}. Set pam-flavour= to change it."
+  echo "PAM stack: {{pam-flavor}}. Set pam-flavor= to change it."
   echo
   echo "Create the account and its directories:"
   echo

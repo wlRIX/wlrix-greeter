@@ -57,7 +57,7 @@ pub fn show(model: Model, width: u32, height: u32) -> Result<(), String> {
     let surface = compositor.create_surface(&qh);
     let window = xdg_shell.create_window(surface, WindowDecorations::RequestClient, &qh);
     window.set_title("wlRIX greeter preview");
-    // The real app_id, so the compositor centres it exactly as it would the greeter.
+    // The real app_id, so the compositor centers it exactly as it would the greeter.
     window.set_app_id("com.wlrix.greeter");
     window.set_min_size(Some((width, height)));
     window.set_max_size(Some((width, height)));

@@ -168,7 +168,7 @@ fn paint_error(
                 px: NAME_PX,
                 x: g.error_text.left() + metrics::TEXT_MARGIN_WIDTH,
                 baseline,
-                colour: palette::FOREGROUND,
+                color: palette::FOREGROUND,
             },
             line,
         );
@@ -242,7 +242,7 @@ fn paint_list(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mode
         }
         icons::draw(canvas, icon_rect, &icons::for_user(user));
 
-        // The login name centred under the icon.
+        // The login name centered under the icon.
         let label_w = fonts.width(Face::Regular, TEXT_PX, &user.name);
         let label_x = cell.x + (cell.w - label_w) / 2;
         let baseline = icon_rect.bottom() + fonts.ascent(Face::Regular, TEXT_PX);
@@ -253,7 +253,7 @@ fn paint_list(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mode
                 px: TEXT_PX,
                 x: label_x,
                 baseline,
-                colour: palette::FOREGROUND,
+                color: palette::FOREGROUND,
             },
             &user.name,
         );
@@ -290,7 +290,7 @@ fn paint_scrollbar(canvas: &mut Canvas, g: &Geometry, model: &Model) {
     }
 }
 
-/// A small centred triangle in a scroll button, pointing up or down.
+/// A small centered triangle in a scroll button, pointing up or down.
 fn arrow(canvas: &mut Canvas, button: Rect, up: bool) {
     let cx = button.x + button.w / 2;
     let cy = button.y + button.h / 2;
@@ -307,7 +307,7 @@ fn arrow(canvas: &mut Canvas, button: Rect, up: bool) {
 
 /// The `Login name:` label, the username field, the full name, and the password row.
 fn paint_fields(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Model) {
-    // The bold label, vertically centred on its row.
+    // The bold label, vertically centered on its row.
     let label_baseline =
         g.name_label.top() + (g.name_label.h + fonts.ascent(Face::Bold, LABEL_PX)) / 2 - 2;
     fonts.draw(
@@ -317,7 +317,7 @@ fn paint_fields(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mo
             px: LABEL_PX,
             x: g.name_label.left(),
             baseline: label_baseline,
-            colour: palette::FOREGROUND,
+            color: palette::FOREGROUND,
         },
         "Login name:",
     );
@@ -341,7 +341,7 @@ fn paint_fields(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mo
                 px: NAME_PX,
                 x: g.full_name.left(),
                 baseline,
-                colour: palette::FOREGROUND,
+                color: palette::FOREGROUND,
             },
             full,
         );
@@ -373,7 +373,7 @@ fn paint_fields(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mo
                 px: NAME_PX,
                 x: g.name_field.left(),
                 baseline: baseline.min(g.wordmark.top()),
-                colour: palette::OUTER_LINE,
+                color: palette::OUTER_LINE,
             },
             message,
         );
@@ -417,7 +417,7 @@ fn text_field(
                 px: 15.0,
                 x,
                 baseline,
-                colour: palette::FOREGROUND,
+                color: palette::FOREGROUND,
             },
             text,
         );
@@ -446,7 +446,7 @@ fn paint_footer(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mo
             px: WORDMARK_PX,
             x: g.wordmark.left(),
             baseline,
-            colour: palette::PANEL_BOTTOM_SHADOW,
+            color: palette::PANEL_BOTTOM_SHADOW,
         },
         "wlRIX",
     );
@@ -467,7 +467,7 @@ fn paint_footer(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mo
     );
 }
 
-/// A button with a centred label, raised or -- while held -- pressed in.
+/// A button with a centered label, raised or -- while held -- pressed in.
 ///
 /// A pressed button swaps to a sunken bevel and the darker `armed` face, and its label
 /// shifts a pixel down and right, so it reads as physically pushed.
@@ -504,7 +504,7 @@ fn button(canvas: &mut Canvas, fonts: &mut Fonts, rect: Rect, label: &str, press
             px: 14.0,
             x,
             baseline,
-            colour: palette::FOREGROUND,
+            color: palette::FOREGROUND,
         },
         label,
     );

@@ -5,7 +5,7 @@
 # password. Everything the login needs (pam_limits, pam_env, pam_loginuid, pam_keyinit and
 # pam_systemd, which is what creates XDG_RUNTIME_DIR) comes in with `system-login`.
 #
-# The Debian flavour of this file spells all of that out because Debian's common-* stack does
+# The Debian flavor of this file spells all of that out because Debian's common-* stack does
 # not; see wlrix-greeter.pam.debian.
 
 auth       requisite    pam_nologin.so

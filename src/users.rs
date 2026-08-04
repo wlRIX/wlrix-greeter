@@ -225,7 +225,7 @@ nobody:x:65534:65534:Nobody:/:/usr/bin/nologin
     }
 
     #[test]
-    fn the_range_is_honoured() {
+    fn the_range_is_honored() {
         // Widen the range and the below-range system account appears; narrow it and the
         // humans drop out. root stays either way.
         let wide = parse_passwd(PASSWD, 500, 60000);

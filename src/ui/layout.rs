@@ -133,7 +133,7 @@ impl Geometry {
         );
         let grid_viewport = Rect::new(inner.left(), inner.top(), inner.w - SCROLLBAR_W, inner.h);
 
-        // The error dialog: a small box centred over the list. Its size is fixed; only
+        // The error dialog: a small box centered over the list. Its size is fixed; only
         // its position depends on the dialog's, so drawing and hit-testing agree.
         let (ebw, ebh) = (340, 148);
         let error_box = Rect::new(

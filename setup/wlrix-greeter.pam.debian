@@ -5,7 +5,7 @@
 # never checks a password.
 #
 # Long because Debian's common-* stack leaves pam_limits, pam_env, pam_loginuid and pam_keyinit
-# to the caller. Arch's `system-login` brings them along, so that flavour is a few lines; see
+# to the caller. Arch's `system-login` brings them along, so that flavor is a few lines; see
 # wlrix-greeter.pam.arch.
 
 auth    requisite       pam_nologin.so

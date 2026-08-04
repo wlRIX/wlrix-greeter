@@ -45,7 +45,7 @@ can write to afterwards.
 |---------------|---------|------------------------------------------------|
 | `prefix`      | `/usr`  | where the binaries go                          |
 | `rootdir`     | *empty* | staged install, as a package build does        |
-| `pam-flavour` | `arch`  | which PAM stack to install (`arch` / `debian`) |
+| `pam-flavor` | `arch`  | which PAM stack to install (`arch` / `debian`) |
 
 What lands:
 
@@ -95,7 +95,7 @@ build stages into `rootdir` on whatever machine the builder happens to be, which
 will land.
 
 ```sh
-sudo just pam-flavour=debian install
+sudo just pam-flavor=debian install
 ```
 
 ## Testing without greetd

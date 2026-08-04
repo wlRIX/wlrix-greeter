@@ -45,7 +45,7 @@ pub struct Run {
     pub x: i32,
     /// The baseline the glyphs sit on.
     pub baseline: i32,
-    pub colour: Rgb,
+    pub color: Rgb,
 }
 
 /// A face's vertical metrics at one size: the top-to-baseline distance and the line box.
@@ -127,7 +127,7 @@ impl Fonts {
     }
 
     /// Draw `text` with the given face, size, position and color. The run is shaped, then each
-    /// covered pixel is blended onto the canvas at the run's colour -- cosmic-text hands back
+    /// covered pixel is blended onto the canvas at the run's color -- cosmic-text hands back
     /// coverage in the alpha channel, which is exactly what [`Canvas::blend`] wants.
     pub fn draw(&mut self, canvas: &mut Canvas, run: Run, text: &str) {
         if text.is_empty() {
@@ -142,8 +142,8 @@ impl Fonts {
             .map(|line| line.line_y)
             .unwrap_or(run.px);
         let dy = run.baseline - baseline.round() as i32;
-        let (r, g, b) = run.colour.channels();
-        let colour = run.colour;
+        let (r, g, b) = run.color.channels();
+        let color = run.color;
 
         buffer.draw(
             &mut self.system,
@@ -156,7 +156,7 @@ impl Fonts {
                 }
                 for row in 0..h as i32 {
                     for col in 0..w as i32 {
-                        canvas.blend(run.x + x + col, dy + y + row, colour, coverage);
+                        canvas.blend(run.x + x + col, dy + y + row, color, coverage);
                     }
                 }
             },

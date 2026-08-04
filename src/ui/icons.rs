@@ -66,9 +66,9 @@ fn draw_keyring(canvas: &mut Canvas, r: Rect) {
     // Three key blades fanning down from the ring.
     let blade_top = cy + r.h / 8;
     let blade_h = r.h / 2;
-    for (i, colour) in [KEY_A, KEY_B, KEY_C].into_iter().enumerate() {
+    for (i, color) in [KEY_A, KEY_B, KEY_C].into_iter().enumerate() {
         let x = cx - r.w / 8 + (i as i32) * (r.w / 8);
-        canvas.fill_rect(Rect::new(x, blade_top, r.w / 12, blade_h), colour);
+        canvas.fill_rect(Rect::new(x, blade_top, r.w / 12, blade_h), color);
     }
 }
 
@@ -91,15 +91,15 @@ fn draw_workstation(canvas: &mut Canvas, r: Rect) {
     canvas.stroke_rect(base, OUTLINE);
 }
 
-/// A rough filled ring, centred on `(cx, cy)` with the given outer `radius`.
-fn ring(canvas: &mut Canvas, cx: i32, cy: i32, radius: i32, colour: Rgb) {
+/// A rough filled ring, centered on `(cx, cy)` with the given outer `radius`.
+fn ring(canvas: &mut Canvas, cx: i32, cy: i32, radius: i32, color: Rgb) {
     let outer = radius * radius;
     let inner = ((radius - 2).max(0)) * ((radius - 2).max(0));
     for dy in -radius..=radius {
         for dx in -radius..=radius {
             let d = dx * dx + dy * dy;
             if d <= outer && d >= inner {
-                canvas.put(cx + dx, cy + dy, colour);
+                canvas.put(cx + dx, cy + dy, color);
             }
         }
     }

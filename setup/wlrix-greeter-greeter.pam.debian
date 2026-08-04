@@ -2,7 +2,7 @@
 #
 # The greeter's *own* session: greetd starting wlrix-greeter as the wlrix-greeter system
 # account, before anybody has logged in. Named by `[default_session] service` in
-# wlrix-greeter.toml. See the Arch flavour for why this is shipped rather than left to
+# wlrix-greeter.toml. See the Arch flavor for why this is shipped rather than left to
 # greetd's `greetd-greeter` default.
 
 # No password to check: this is a system account with no login of its own.

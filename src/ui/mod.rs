@@ -3,7 +3,7 @@
 //!
 //! Two surfaces. The steel-blue backdrop is a layer-shell **background** surface, one
 //! per output, covering each screen behind everything. The login dialog is an ordinary
-//! xdg toplevel with `app_id` `com.wlrix.greeter`, which the compositor centres.
+//! xdg toplevel with `app_id` `com.wlrix.greeter`, which the compositor centers.
 //!
 //! The split is deliberate: this compositor composites layer surfaces but routes no
 //! input to them, while a toplevel gets keyboard focus on map and pointer hit-testing.
@@ -492,8 +492,8 @@ impl Greeter {
 }
 
 /// Paint every pixel of a raw buffer one color.
-fn fill(canvas: &mut [u8], colour: Rgb) {
-    let bytes = colour.0.to_ne_bytes();
+fn fill(canvas: &mut [u8], color: Rgb) {
+    let bytes = color.0.to_ne_bytes();
     for pixel in canvas.chunks_exact_mut(4) {
         pixel.copy_from_slice(&bytes);
     }
