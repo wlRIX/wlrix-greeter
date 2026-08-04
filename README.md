@@ -25,7 +25,7 @@ rather than presenting a login it cannot complete.
 | Option                   | Effect                                                               |
 |--------------------------|----------------------------------------------------------------------|
 | `--user <name>`          | log this user in without asking who                                  |
-| `--session <command>...` | what to start (default: `wlrix-session`); takes the rest of the line |
+| `--session <command>...` | what to start (default: `start-wlrix`); takes the rest of the line   |
 | `-h`, `--help`           | usage                                                                |
 
 ## Installing

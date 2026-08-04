@@ -13,7 +13,11 @@ use wlrix_greeter::greetd::{Greetd, Outcome, QuestionKind};
 use wlrix_greeter::{prompt, ui};
 
 /// What a successful login starts.
-const DEFAULT_SESSION: &str = "wlrix-session";
+///
+/// The launcher, not `wlrix-session` itself: it is what sets the session's environment --
+/// `XDG_CURRENT_DESKTOP`, the toolkit backends, the keyring, the systemd user environment --
+/// and then execs the session manager. Starting the binary directly skips all of it.
+const DEFAULT_SESSION: &str = "start-wlrix";
 
 struct Args {
     session: Vec<String>,
