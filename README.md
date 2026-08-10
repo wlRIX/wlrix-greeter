@@ -22,11 +22,11 @@ rather than presenting a login it cannot complete.
 
 ## Options
 
-| Option                   | Effect                                                               |
-|--------------------------|----------------------------------------------------------------------|
-| `--user <name>`          | log this user in without asking who                                  |
-| `--session <command>...` | what to start (default: `start-wlrix`); takes the rest of the line   |
-| `-h`, `--help`           | usage                                                                |
+| Option                   | Effect                                                             |
+|--------------------------|--------------------------------------------------------------------|
+| `--user <name>`          | log this user in without asking who                                |
+| `--session <command>...` | what to start (default: `start-wlrix`); takes the rest of the line |
+| `-h`, `--help`           | usage                                                              |
 
 ## Installing
 
@@ -41,10 +41,10 @@ sudo systemctl enable wlrix-greeter.service
 `install` deliberately does not build: it is normally run as root, and building as root leaves a target directory nobody
 can write to afterwards.
 
-| Variable      | Default | Purpose                                        |
-|---------------|---------|------------------------------------------------|
-| `prefix`      | `/usr`  | where the binaries go                          |
-| `rootdir`     | *empty* | staged install, as a package build does        |
+| Variable     | Default | Purpose                                        |
+|--------------|---------|------------------------------------------------|
+| `prefix`     | `/usr`  | where the binaries go                          |
+| `rootdir`    | *empty* | staged install, as a package build does        |
 | `pam-flavor` | `arch`  | which PAM stack to install (`arch` / `debian`) |
 
 What lands:
@@ -85,6 +85,24 @@ to be *told* both names or it uses its own defaults and neither of these files i
   account, before anybody has logged in. Shipped rather than left to greetd's `greetd-greeter` default, which no
   distribution is obliged to provide — Arch's greetd package ships only `greetd`, and PAM's fallback for an unknown
   service denies everything, so the greeter would not start at all.
+
+### Telling logind it is a Wayland session
+
+`StartSession` carries `XDG_SESSION_TYPE=wayland`, and it has to be *here* rather than in the session's own startup
+script. greetd hands a greeter's environment to `pam_putenv` **before** `pam_open_session`, and says in its own source
+that it does so precisely so it can affect `pam_systemd.so` — so this is what decides how logind records the session,
+and it is why `loginctl show-session -p Type` answers `wayland`.
+
+Left out, `pam_systemd` infers the type from how the login arrived, and a greetd login is a console login as far as
+logind is concerned, so it lands on `tty`. That is not cosmetic: Chromium and Edge resolve their default
+`--ozone-platform-hint=auto` by reading `XDG_SESSION_TYPE`, and fall back to X11 when it does not say `wayland` — the
+desktop's browser was running under XWayland for exactly this reason. `start-wlrix` force-exports the variable as well,
+which covers starting a session from a TTY by hand, but an export cannot reach PAM: by the time the script runs, logind
+has already made up its mind.
+
+`cosmic-greeter` does the same thing, per session type, and additionally derives `XDG_CURRENT_DESKTOP` and
+`XDG_SESSION_DESKTOP` from the chosen session's `DesktopNames`. Those two are not sent here: `pam_systemd` has no
+opinion on either, `start-wlrix` already sets both, and nothing runs in between that reads them.
 
 ### PAM flavors
 

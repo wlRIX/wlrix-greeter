@@ -29,6 +29,29 @@ use greetd_ipc::{Request, Response, codec::SyncCodec};
 /// Where greetd tells greeters to find it.
 const SOCKET_ENV: &str = "GREETD_SOCK";
 
+/// What the session is told about itself, handed over with `StartSession`.
+///
+/// **This reaches PAM, which is the whole reason it is here rather than in `start-wlrix`.**
+/// greetd `pam_putenv`s a greeter's environment *before* `pam_open_session`, and says in its own
+/// source that it does so precisely to let it affect `pam_systemd.so`. So this is what decides
+/// how logind records the session, and `loginctl show-session -p Type` answers `wayland` because
+/// of this line.
+///
+/// Without it, `pam_systemd` works the type out from how the login arrived: a greetd login is a
+/// console login as far as logind is concerned, so it landed on `tty`. That is not cosmetic --
+/// Chromium and Edge resolve `--ozone-platform-hint=auto` by reading `XDG_SESSION_TYPE` and fall
+/// back to X11 when it does not say `wayland`, so the whole desktop's browser was running under
+/// XWayland because of it.
+///
+/// `start-wlrix` also forces the variable, and that stays: it is what covers starting a session
+/// from a TTY by hand, where there is no greeter to set anything. This covers the greeter route,
+/// and only this one can fix logind's own record, which an export cannot reach.
+///
+/// Only the session *type*. `XDG_CURRENT_DESKTOP` and `XDG_SESSION_DESKTOP` say which desktop
+/// this is, `pam_systemd` has no opinion on either, and `start-wlrix` already sets both -- there
+/// is nothing between here and that script that reads them.
+const SESSION_ENV: &[&str] = &["XDG_SESSION_TYPE=wayland"];
+
 pub struct Greetd {
     stream: UnixStream,
     /// What to start once PAM is satisfied. Held from `create_session`, because the
@@ -142,7 +165,7 @@ impl Greetd {
                 self.pending = None;
                 match self.round_trip(Request::StartSession {
                     cmd: self.command.clone(),
-                    env: Vec::new(),
+                    env: SESSION_ENV.iter().map(|entry| entry.to_string()).collect(),
                 })? {
                     Response::Success => Ok(Step::Started),
                     Response::Error { description, .. } => Err(description),
@@ -291,6 +314,25 @@ mod tests {
         assert!(
             matches!(&seen[1], Request::StartSession { cmd, .. } if cmd == &session()),
             "a success must start the session, with the command it was given"
+        );
+    }
+
+    /// The session type has to go out with `StartSession`, because greetd hands a greeter's
+    /// environment to `pam_putenv` before `pam_open_session` -- so this is what makes logind
+    /// record a Wayland session rather than the `tty` it infers from a greetd login. An export
+    /// in `start-wlrix` cannot do it: by then PAM has already decided.
+    #[test]
+    fn the_session_is_started_as_a_wayland_session() {
+        let (mut greetd, server) = scripted(vec![Response::Success, Response::Success]);
+        greetd.create_session("someone", &session()).unwrap();
+
+        let seen = server.join().unwrap();
+        let Request::StartSession { env, .. } = &seen[1] else {
+            panic!("the second request must start the session");
+        };
+        assert!(
+            env.iter().any(|entry| entry == "XDG_SESSION_TYPE=wayland"),
+            "greetd must be told this is a Wayland session, got {env:?}"
         );
     }
 
