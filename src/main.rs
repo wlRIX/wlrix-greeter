@@ -27,12 +27,24 @@ struct Args {
     /// default now that it can log in; the terminal face stays for a VT with no
     /// compositor, and as a fallback.
     text: bool,
+    /// Which color scheme to draw in.
+    ///
+    /// A flag rather than a config key, and deliberately: the greeter reads no config file
+    /// of its own -- it runs before there is a user whose settings could be read, and its
+    /// configuration is greetd's, root-owned under `/etc/greetd/`. That is the right place
+    /// for this, so greetd passes it:
+    ///
+    /// ```toml
+    /// command = "wlrix-compositor -c 'wlrix-greeter --palette gotham'"
+    /// ```
+    palette: Option<String>,
 }
 
 fn parse_args() -> Result<Args, String> {
     let mut session = vec![DEFAULT_SESSION.to_string()];
     let mut username = None;
     let mut text = false;
+    let mut palette = None;
 
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -54,6 +66,12 @@ fn parse_args() -> Result<Args, String> {
             }
             // Fall back to the terminal prompts, for a VT with no compositor.
             "--text" => text = true,
+            "--palette" => {
+                palette = Some(
+                    args.next()
+                        .ok_or_else(|| "--palette needs a scheme name".to_string())?,
+                );
+            }
             "--help" | "-h" => {
                 println!(
                     "wlrix-greeter {}\n\n\
@@ -62,6 +80,8 @@ fn parse_args() -> Result<Args, String> {
                      Options:\n  \
                        --user <name>           log this user in without asking who\n  \
                        --text                  use the terminal prompts, not the graphical screen\n  \
+                       --palette <name>        colour scheme: classic (default), classic-g10,\n  \
+                                               classic-g24, gotham\n  \
                        --session <command>...  what to start (default: {DEFAULT_SESSION});\n  \
                                                takes the rest of the line\n  \
                        -h, --help              this message",
@@ -77,6 +97,7 @@ fn parse_args() -> Result<Args, String> {
         session,
         username,
         text,
+        palette,
     })
 }
 
@@ -96,7 +117,14 @@ fn main() -> std::process::ExitCode {
         if let Some(path) = wlrix_greeter::logging::to_file() {
             println!("wlrix-greeter: logging to {}", path.display());
         }
-        return match ui::run(args.session, args.username) {
+        // Resolve rather than reject: a mistyped scheme name in greetd's config must not
+        // stop the login screen from coming up, because there is no way to fix it from a
+        // machine that will not let you log in.
+        let (palette, unknown) = wlrix_ui::palette::resolve(args.palette.as_deref());
+        if let Some(why) = unknown {
+            eprintln!("wlrix-greeter: {why}; using {}", palette.id);
+        }
+        return match ui::run(args.session, args.username, palette) {
             Ok(()) => std::process::ExitCode::SUCCESS,
             Err(err) => {
                 eprintln!("wlrix-greeter: {err}");

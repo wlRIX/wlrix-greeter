@@ -22,11 +22,28 @@ rather than presenting a login it cannot complete.
 
 ## Options
 
-| Option                   | Effect                                                             |
-|--------------------------|--------------------------------------------------------------------|
-| `--user <name>`          | log this user in without asking who                                |
-| `--session <command>...` | what to start (default: `start-wlrix`); takes the rest of the line |
-| `-h`, `--help`           | usage                                                              |
+| Option                   | Effect                                                                     |
+|--------------------------|----------------------------------------------------------------------------|
+| `--user <name>`          | log this user in without asking who                                        |
+| `--session <command>...` | what to start (default: `start-wlrix`); takes the rest of the line         |
+| `--palette <name>`       | colour scheme: `classic` (default), `classic-g10`, `classic-g24`, `gotham` |
+| `-h`, `--help`           | usage                                                                      |
+
+`--palette` has to come *before* `--session`, which takes the rest of the line.
+
+A flag rather than a config key, deliberately: the greeter reads no config file of its own. It runs before there is a
+user whose settings could be read, and its configuration is greetd's, root-owned under `/etc/greetd/` — which is the
+right place for this:
+
+```toml
+command = "wlrix-compositor -c 'wlrix-greeter --palette gotham'"
+```
+
+An unrecognized name logs a line and draws the default. A mistyped scheme must not stop the login screen from coming up,
+because there is no way to fix it from a machine that will not let you log in.
+
+Note that this sets the *dialog's* scheme. The window chrome around it comes from `wlrix-compositor`, which reads
+`/etc/wlrix/compositor.toml` — set `[appearance] palette` there too, or the login screen comes up half-themed.
 
 ## Installing
 
@@ -128,7 +145,26 @@ GREETD_SOCK=/tmp/fake-greetd.sock cargo run
 ```
 
 `just preview <state>` draws the login dialog with no greetd behind it at all, for eyeballing against the reference:
-`selected`, `typed`, `password`, `error`.
+`selected`, `typed`, `password`, `error`. A second argument picks the scheme.
+
+`examples/render_preview.rs` writes the same frame to a PNM with **no compositor at all**, which is what lets a change
+to the drawing be diffed against the frame before it rather than eyeballed:
+
+```sh
+cargo run --example render_preview -- before.pnm            # classic
+cargo run --example render_preview -- after.pnm gotham password
+```
+
+## Shared drawing code
+
+The canvas, the Motif bevel, the widgets, the fonts and the palette come from
+[`wlrix-ui`](https://github.com/wlRIX/wlrix-ui). This repo used to carry its own copy of all of it — `wlrix-desktop`
+copied that copy, and the two drifted.
+
+It is a **git dependency pinned by rev**, not a path dependency, so this repo still builds from a fresh standalone
+clone. `just link-ui` in `wlrix-epoch` patches in a sibling checkout for working on both sides at once.
+
+What stayed here: the drawn keyring and workstation icons, which are artwork rather than chrome.
 
 The interesting part of a greeter is the conversation — how many rounds, what is sent when an answer is refused, what
 happens on a wrong password — and none of that is checked by compiling.

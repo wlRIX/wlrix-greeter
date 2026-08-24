@@ -856,11 +856,18 @@ name = "wlrix-greeter"
 version = "0.1.0"
 dependencies = [
  "calloop",
- "cosmic-text",
  "greetd_ipc",
  "libc",
  "smithay-client-toolkit",
  "wayland-client",
+ "wlrix-ui",
+]
+
+[[package]]
+name = "wlrix-ui"
+version = "0.1.0"
+dependencies = [
+ "cosmic-text",
 ]
 
 [[package]]

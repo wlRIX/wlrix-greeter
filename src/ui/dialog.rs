@@ -9,14 +9,15 @@
 //! Interaction is a later stage. This draws whatever the model says, including a
 //! selection and a shown password field, so the preview can exercise those states.
 
-use crate::theme::Rgb;
-use crate::theme::font::{Face, Fonts, Run};
-use crate::theme::palette::{self, metrics};
-use crate::ui::canvas::{Canvas, Rect};
 use crate::ui::icons;
 use crate::ui::layout::Geometry;
-use crate::ui::motif::{self, Bevel};
 use crate::users::User;
+use wlrix_ui::Rgb;
+use wlrix_ui::canvas::{Canvas, Rect};
+use wlrix_ui::motif::{self, Bevel};
+use wlrix_ui::palette::Palette;
+use wlrix_ui::text::{Face, Fonts, Run};
+use wlrix_ui::widget::{arrow, button, text_field};
 
 /// Which field has the keyboard, and where the caret is drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,31 +92,32 @@ const NAME_PX: f32 = 13.0;
 const WORDMARK_PX: f32 = 22.0;
 
 /// Draw the dialog into `canvas`, laid out to its size.
-pub fn paint(canvas: &mut Canvas, fonts: &mut Fonts, model: &Model) {
-    let g = Geometry::compute(canvas.width(), canvas.height());
+pub fn paint(canvas: &mut Canvas, palette: &Palette, fonts: &mut Fonts, model: &Model) {
+    let g = Geometry::compute(palette, canvas.width(), canvas.height());
 
     // The dialog itself: a raised panel with the black keyline around it.
     motif::panel(
         canvas,
         g.dialog,
-        palette::PANEL,
+        palette.panel,
         Bevel::raised(
-            palette::PANEL_TOP_SHADOW,
-            palette::PANEL_BOTTOM_SHADOW,
-            metrics::SHADOW_DEFAULT,
+            palette.panel_top_shadow,
+            palette.panel_bottom_shadow,
+            palette.metrics.shadow_thickness_default,
         ),
     );
-    motif::outline(canvas, g.dialog, palette::OUTER_LINE);
+    motif::outline(canvas, g.dialog, palette.outer_line);
 
-    paint_list(canvas, fonts, &g, model);
-    paint_scrollbar(canvas, &g, model);
-    paint_fields(canvas, fonts, &g, model);
-    paint_footer(canvas, fonts, &g, model);
+    paint_list(canvas, palette, fonts, &g, model);
+    paint_scrollbar(canvas, palette, &g, model);
+    paint_fields(canvas, palette, fonts, &g, model);
+    paint_footer(canvas, palette, fonts, &g, model);
 
     // The error dialog goes on top of everything, modal.
     if let Some(message) = &model.error {
         paint_error(
             canvas,
+            palette,
             fonts,
             &g,
             message,
@@ -128,6 +130,7 @@ pub fn paint(canvas: &mut Canvas, fonts: &mut Fonts, model: &Model) {
 /// message, and an OK button.
 fn paint_error(
     canvas: &mut Canvas,
+    palette: &Palette,
     fonts: &mut Fonts,
     g: &Geometry,
     message: &str,
@@ -136,26 +139,26 @@ fn paint_error(
     motif::panel(
         canvas,
         g.error_box,
-        palette::PANEL,
+        palette.panel,
         Bevel::raised(
-            palette::PANEL_TOP_SHADOW,
-            palette::PANEL_BOTTOM_SHADOW,
-            metrics::SHADOW_DEFAULT,
+            palette.panel_top_shadow,
+            palette.panel_bottom_shadow,
+            palette.metrics.shadow_thickness_default,
         ),
     );
-    motif::outline(canvas, g.error_box, palette::OUTER_LINE);
+    motif::outline(canvas, g.error_box, palette.outer_line);
 
-    prohibition_icon(canvas, g.error_icon);
+    prohibition_icon(canvas, palette, g.error_icon);
 
     // The message in a sunken read-only field, one line per `\n`.
     motif::panel(
         canvas,
         g.error_text,
-        palette::PANEL,
+        palette.panel,
         Bevel::sunken(
-            palette::PANEL_TOP_SHADOW,
-            palette::PANEL_BOTTOM_SHADOW,
-            metrics::SHADOW_DEFAULT,
+            palette.panel_top_shadow,
+            palette.panel_bottom_shadow,
+            palette.metrics.shadow_thickness_default,
         ),
     );
     let line_h = fonts.line_height(Face::Regular, NAME_PX);
@@ -166,24 +169,24 @@ fn paint_error(
             Run {
                 face: Face::Regular,
                 px: NAME_PX,
-                x: g.error_text.left() + metrics::TEXT_MARGIN_WIDTH,
+                x: g.error_text.left() + palette.metrics.text_margin_width,
                 baseline,
-                color: palette::FOREGROUND,
+                color: palette.foreground,
             },
             line,
         );
         baseline += line_h;
     }
 
-    button(canvas, fonts, g.error_ok, "OK", ok_pressed);
+    button(canvas, palette, fonts, g.error_ok, "OK", ok_pressed);
 }
 
 /// A red square with a white prohibition symbol -- the circle and bar of "no entry".
-fn prohibition_icon(canvas: &mut Canvas, rect: Rect) {
+fn prohibition_icon(canvas: &mut Canvas, palette: &Palette, rect: Rect) {
     const RED: Rgb = Rgb(0xff_e00000);
     const WHITE: Rgb = Rgb(0xff_ffffff);
     canvas.fill_rect(rect, RED);
-    canvas.stroke_rect(rect, palette::OUTER_LINE);
+    canvas.stroke_rect(rect, palette.outer_line);
 
     let cx = rect.x + rect.w / 2;
     let cy = rect.y + rect.h / 2;
@@ -209,15 +212,21 @@ fn prohibition_icon(canvas: &mut Canvas, rect: Rect) {
 }
 
 /// The sunken panel and the icon grid inside it.
-fn paint_list(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Model) {
+fn paint_list(
+    canvas: &mut Canvas,
+    palette: &Palette,
+    fonts: &mut Fonts,
+    g: &Geometry,
+    model: &Model,
+) {
     motif::panel(
         canvas,
         g.list_panel,
-        palette::LIST_BACKGROUND,
+        palette.list_background,
         Bevel::sunken(
-            palette::PANEL_TOP_SHADOW,
-            palette::PANEL_BOTTOM_SHADOW,
-            metrics::SHADOW_SCROLLED_WINDOW,
+            palette.panel_top_shadow,
+            palette.panel_bottom_shadow,
+            palette.metrics.shadow_thickness_scrolled_window,
         ),
     );
 
@@ -237,10 +246,10 @@ fn paint_list(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mode
         // The yellow selection ring goes behind the icon.
         if model.selected == Some(index) {
             let ring = icon_rect.inset(-3);
-            canvas.fill_rect(ring, palette::SELECT_FILL);
-            canvas.stroke_rect(ring, palette::OUTER_LINE);
+            canvas.fill_rect(ring, palette.select_fill);
+            canvas.stroke_rect(ring, palette.outer_line);
         }
-        icons::draw(canvas, icon_rect, &icons::for_user(user));
+        icons::draw(canvas, palette, icon_rect, &icons::for_user(user));
 
         // The login name centered under the icon.
         let label_w = fonts.width(Face::Regular, TEXT_PX, &user.name);
@@ -253,7 +262,7 @@ fn paint_list(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mode
                 px: TEXT_PX,
                 x: label_x,
                 baseline,
-                color: palette::FOREGROUND,
+                color: palette.foreground,
             },
             &user.name,
         );
@@ -261,52 +270,43 @@ fn paint_list(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mode
 }
 
 /// The scrollbar: trough, arrows, and a thumb sized to the visible fraction.
-fn paint_scrollbar(canvas: &mut Canvas, g: &Geometry, model: &Model) {
+fn paint_scrollbar(canvas: &mut Canvas, palette: &Palette, g: &Geometry, model: &Model) {
     motif::panel(
         canvas,
         g.scrollbar,
-        palette::TROUGH,
+        palette.trough,
         Bevel::sunken(
-            palette::TROUGH_TOP_SHADOW,
-            palette::TROUGH_BOTTOM_SHADOW,
-            metrics::SHADOW_SCROLL_BAR,
+            palette.trough_top_shadow,
+            palette.trough_bottom_shadow,
+            palette.metrics.shadow_thickness_scroll_bar,
         ),
     );
 
     let control = Bevel::raised(
-        palette::FACE_TOP_SHADOW,
-        palette::FACE_BOTTOM_SHADOW,
-        metrics::SHADOW_SCROLL_BAR,
+        palette.face_top_shadow,
+        palette.face_bottom_shadow,
+        palette.metrics.shadow_thickness_scroll_bar,
     );
-    motif::panel(canvas, g.scroll_up, palette::SCROLL_BAR_CONTROL, control);
-    arrow(canvas, g.scroll_up, true);
-    motif::panel(canvas, g.scroll_down, palette::SCROLL_BAR_CONTROL, control);
-    arrow(canvas, g.scroll_down, false);
+    motif::panel(canvas, g.scroll_up, palette.scroll_bar_control, control);
+    arrow(canvas, palette, g.scroll_up, true);
+    motif::panel(canvas, g.scroll_down, palette.scroll_bar_control, control);
+    arrow(canvas, palette, g.scroll_down, false);
 
     // The thumb, sized and placed by the shared geometry so it matches hit-testing.
     if g.scroll_track().h > 0 {
         let thumb = g.thumb(model.users.len(), model.scroll_y);
-        motif::panel(canvas, thumb, palette::SCROLL_BAR_CONTROL, control);
-    }
-}
-
-/// A small centered triangle in a scroll button, pointing up or down.
-fn arrow(canvas: &mut Canvas, button: Rect, up: bool) {
-    let cx = button.x + button.w / 2;
-    let cy = button.y + button.h / 2;
-    let size: i32 = 4;
-    // The apex is one pixel wide and the base `2*size+1`; `up` flips which end is which.
-    for step in 0..=size {
-        let half = if up { step } else { size - step };
-        let row_y = cy - size / 2 + step;
-        for dx in -half..=half {
-            canvas.put(cx + dx, row_y, palette::FOREGROUND);
-        }
+        motif::panel(canvas, thumb, palette.scroll_bar_control, control);
     }
 }
 
 /// The `Login name:` label, the username field, the full name, and the password row.
-fn paint_fields(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Model) {
+fn paint_fields(
+    canvas: &mut Canvas,
+    palette: &Palette,
+    fonts: &mut Fonts,
+    g: &Geometry,
+    model: &Model,
+) {
     // The bold label, vertically centered on its row.
     let label_baseline =
         g.name_label.top() + (g.name_label.h + fonts.ascent(Face::Bold, LABEL_PX)) / 2 - 2;
@@ -317,13 +317,14 @@ fn paint_fields(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mo
             px: LABEL_PX,
             x: g.name_label.left(),
             baseline: label_baseline,
-            color: palette::FOREGROUND,
+            color: palette.foreground,
         },
         "Login name:",
     );
 
     text_field(
         canvas,
+        palette,
         fonts,
         g.name_field,
         &model.username,
@@ -341,7 +342,7 @@ fn paint_fields(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mo
                 px: NAME_PX,
                 x: g.full_name.left(),
                 baseline,
-                color: palette::FOREGROUND,
+                color: palette.foreground,
             },
             full,
         );
@@ -356,6 +357,7 @@ fn paint_fields(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mo
         };
         text_field(
             canvas,
+            palette,
             fonts,
             g.password_field,
             &shown,
@@ -373,70 +375,21 @@ fn paint_fields(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mo
                 px: NAME_PX,
                 x: g.name_field.left(),
                 baseline: baseline.min(g.wordmark.top()),
-                color: palette::OUTER_LINE,
+                color: palette.outer_line,
             },
             message,
         );
     }
 }
 
-/// A sunken pink text field with its contents, a focus ring, and a caret.
-///
-/// The caret sits at the end of the text: a login field is only ever appended to or
-/// backspaced, so there is no mid-string cursor to place.
-fn text_field(
-    canvas: &mut Canvas,
-    fonts: &mut Fonts,
-    rect: Rect,
-    text: &str,
-    focused: bool,
-    caret_on: bool,
-) {
-    motif::panel(
-        canvas,
-        rect,
-        palette::TEXT_FIELD,
-        Bevel::sunken(
-            palette::TEXT_TOP_SHADOW,
-            palette::TEXT_BOTTOM_SHADOW,
-            metrics::SHADOW_TEXT,
-        ),
-    );
-    // A focused field takes a thin keyline just inside the bevel.
-    if focused {
-        canvas.stroke_rect(rect.inset(metrics::SHADOW_TEXT), palette::OUTER_LINE);
-    }
-
-    let x = rect.left() + metrics::TEXT_MARGIN_WIDTH + metrics::SHADOW_TEXT;
-    let baseline = rect.top() + (rect.h + fonts.ascent(Face::Regular, 15.0)) / 2 - 2;
-    if !text.is_empty() {
-        fonts.draw(
-            canvas,
-            Run {
-                face: Face::Regular,
-                px: 15.0,
-                x,
-                baseline,
-                color: palette::FOREGROUND,
-            },
-            text,
-        );
-    }
-
-    // The caret, in the visible half of its blink, just past the last glyph.
-    if focused && caret_on {
-        let caret_x = x + fonts.width(Face::Regular, 15.0, text);
-        let top = rect.top() + metrics::SHADOW_TEXT + 3;
-        let height = rect.h - 2 * metrics::SHADOW_TEXT - 6;
-        canvas.fill_rect(
-            Rect::new(caret_x, top, 1, height.max(1)),
-            palette::FOREGROUND,
-        );
-    }
-}
-
 /// The `wlRIX` wordmark and the two buttons.
-fn paint_footer(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Model) {
+fn paint_footer(
+    canvas: &mut Canvas,
+    palette: &Palette,
+    fonts: &mut Fonts,
+    g: &Geometry,
+    model: &Model,
+) {
     // The gray italic wordmark, baseline-aligned with the buttons.
     let baseline = g.wordmark.top() + (g.wordmark.h + fonts.ascent(Face::Italic, WORDMARK_PX)) / 2;
     fonts.draw(
@@ -446,13 +399,14 @@ fn paint_footer(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mo
             px: WORDMARK_PX,
             x: g.wordmark.left(),
             baseline,
-            color: palette::PANEL_BOTTOM_SHADOW,
+            color: palette.panel_bottom_shadow,
         },
         "wlRIX",
     );
 
     button(
         canvas,
+        palette,
         fonts,
         g.login_button,
         "Log In",
@@ -460,52 +414,10 @@ fn paint_footer(canvas: &mut Canvas, fonts: &mut Fonts, g: &Geometry, model: &Mo
     );
     button(
         canvas,
+        palette,
         fonts,
         g.help_button,
         "Help",
         model.armed == Some(Button::Help),
-    );
-}
-
-/// A button with a centered label, raised or -- while held -- pressed in.
-///
-/// A pressed button swaps to a sunken bevel and the darker `armed` face, and its label
-/// shifts a pixel down and right, so it reads as physically pushed.
-fn button(canvas: &mut Canvas, fonts: &mut Fonts, rect: Rect, label: &str, pressed: bool) {
-    let (fill, bevel) = if pressed {
-        (
-            palette::ARMED,
-            Bevel::sunken(
-                palette::FACE_TOP_SHADOW,
-                palette::FACE_BOTTOM_SHADOW,
-                metrics::SHADOW_DEFAULT,
-            ),
-        )
-    } else {
-        (
-            palette::FACE,
-            Bevel::raised(
-                palette::FACE_TOP_SHADOW,
-                palette::FACE_BOTTOM_SHADOW,
-                metrics::SHADOW_DEFAULT,
-            ),
-        )
-    };
-    motif::panel(canvas, rect, fill, bevel);
-
-    let nudge = if pressed { 1 } else { 0 };
-    let text_w = fonts.width(Face::Regular, 14.0, label);
-    let x = rect.left() + (rect.w - text_w) / 2 + nudge;
-    let baseline = rect.top() + (rect.h + fonts.ascent(Face::Regular, 14.0)) / 2 - 2 + nudge;
-    fonts.draw(
-        canvas,
-        Run {
-            face: Face::Regular,
-            px: 14.0,
-            x,
-            baseline,
-            color: palette::FOREGROUND,
-        },
-        label,
     );
 }

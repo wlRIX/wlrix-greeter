@@ -62,8 +62,14 @@ test:
 # Draw the login dialog with no greetd behind it, for eyeballing against the reference.
 # Takes a state: selected, typed, password, error. See examples/paint_preview.rs.
 [doc("Draw the login dialog with no greetd behind it")]
-preview state='':
-  cargo run --example paint_preview -- {{state}}
+preview state='' scheme='':
+  cargo run --example paint_preview -- {{state}} {{scheme}}
+
+# The same frame to a file, with no compositor -- which is what lets a change to the drawing
+# be diffed against the frame before it rather than eyeballed. See examples/render_preview.rs.
+[doc("Write one dialog frame to a PNM, headless")]
+render out='dialog.pnm' scheme='' state='':
+  cargo run --example render_preview -- {{out}} {{scheme}} {{state}}
 
 # A stand-in greetd that authenticates nobody, to run the greeter against. See
 # examples/fake_greetd.rs.

@@ -14,6 +14,8 @@
 //!   error       the modal "cannot log in" dialog
 //!   pressed     the Log In button held down
 //!
+//! A scheme can follow the state: `cargo run --example paint_preview -- selected gotham`
+//!
 //! Usage: `cargo run --example paint_preview [state]` under a Wayland compositor.
 //! Not part of the greeter; a dev tool only.
 
@@ -45,6 +47,7 @@ fn main() {
     // Show the caret, so its rendering is in the picture too.
     model.caret_on = true;
 
+    let scheme = std::env::args().nth(2);
     match std::env::args().nth(1).as_deref() {
         Some("selected") => {
             model.selected = Some(1);
@@ -81,7 +84,11 @@ fn main() {
         _ => {}
     }
 
-    if let Err(err) = show(model, 560, 470) {
+    let (palette, unknown) = wlrix_ui::palette::resolve(scheme.as_deref());
+    if let Some(why) = unknown {
+        eprintln!("{why}");
+    }
+    if let Err(err) = show(model, palette, 560, 470) {
         eprintln!("paint_preview: {err}");
         std::process::exit(1);
     }

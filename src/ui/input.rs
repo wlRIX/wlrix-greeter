@@ -288,7 +288,7 @@ mod tests {
     }
 
     fn geometry() -> Geometry {
-        Geometry::compute(560, 470)
+        Geometry::compute(wlrix_ui::palette::DEFAULT, 560, 470)
     }
 
     #[test]
@@ -484,7 +484,7 @@ mod flow {
         ];
         let mut model = Model::new(users);
         let mut input = Input::default();
-        let g = Geometry::compute(560, 470);
+        let g = Geometry::compute(wlrix_ui::palette::DEFAULT, 560, 470);
 
         // Click vic485's icon: selected, field filled, focused.
         let cell = g.cell(1, 0);

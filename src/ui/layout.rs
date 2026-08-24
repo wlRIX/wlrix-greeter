@@ -8,9 +8,9 @@
 //! The password row is given a place from the start, whether or not it is shown, so
 //! revealing it never resizes the dialog.
 
-use crate::theme::palette::metrics;
-use crate::ui::canvas::Rect;
 use crate::ui::icons::ICON_SIZE;
+use wlrix_ui::canvas::Rect;
+use wlrix_ui::palette::Palette;
 
 /// Padding between the dialog edge and its contents.
 const MARGIN: i32 = 12;
@@ -18,8 +18,6 @@ const MARGIN: i32 = 12;
 const GAP: i32 = 10;
 /// Height of the text fields and buttons.
 const FIELD_H: i32 = 28;
-/// The scrollbar's width, from the palette metrics.
-const SCROLLBAR_W: i32 = metrics::SCROLL_BAR_SIZE;
 /// One icon plus its label, the grid's cell.
 const CELL_W: i32 = ICON_SIZE + 24;
 const CELL_H: i32 = ICON_SIZE + 22;
@@ -76,7 +74,12 @@ pub enum Widget {
 
 impl Geometry {
     /// Lay the dialog out at `width` x `height`.
-    pub fn compute(width: i32, height: i32) -> Self {
+    pub fn compute(palette: &Palette, width: i32, height: i32) -> Self {
+        // The scrollbar's width and the list panel's bevel are the palette's, not this
+        // module's. They are geometry rather than color, but they travel with the scheme --
+        // and hit-testing reads this same `Geometry`, so a scheme that changed either would
+        // otherwise paint a scrollbar the clicks miss.
+        let scrollbar_w = palette.metrics.scroll_bar_size;
         let dialog = Rect::new(0, 0, width, height);
         let content = dialog.inset(MARGIN);
 
@@ -117,21 +120,21 @@ impl Geometry {
             content.w,
             username_row_y - GAP - content.top(),
         );
-        let inner = list_panel.inset(metrics::SHADOW_SCROLLED_WINDOW);
+        let inner = list_panel.inset(palette.metrics.shadow_thickness_scrolled_window);
         let scrollbar = Rect::new(
-            inner.right() - SCROLLBAR_W,
+            inner.right() - scrollbar_w,
             inner.top(),
-            SCROLLBAR_W,
+            scrollbar_w,
             inner.h,
         );
-        let scroll_up = Rect::new(scrollbar.left(), scrollbar.top(), SCROLLBAR_W, SCROLLBAR_W);
+        let scroll_up = Rect::new(scrollbar.left(), scrollbar.top(), scrollbar_w, scrollbar_w);
         let scroll_down = Rect::new(
             scrollbar.left(),
-            scrollbar.bottom() - SCROLLBAR_W,
-            SCROLLBAR_W,
-            SCROLLBAR_W,
+            scrollbar.bottom() - scrollbar_w,
+            scrollbar_w,
+            scrollbar_w,
         );
-        let grid_viewport = Rect::new(inner.left(), inner.top(), inner.w - SCROLLBAR_W, inner.h);
+        let grid_viewport = Rect::new(inner.left(), inner.top(), inner.w - scrollbar_w, inner.h);
 
         // The error dialog: a small box centered over the list. Its size is fixed; only
         // its position depends on the dialog's, so drawing and hit-testing agree.
@@ -309,7 +312,7 @@ mod tests {
 
     #[test]
     fn a_click_resolves_to_the_icon_drawn_there() {
-        let g = Geometry::compute(560, 470);
+        let g = Geometry::compute(wlrix_ui::palette::DEFAULT, 560, 470);
         // Draw cell 3, then hit-test its center; it must come back as 3.
         let scroll = 0;
         let cell = g.cell(3, scroll);
@@ -319,7 +322,7 @@ mod tests {
 
     #[test]
     fn hit_testing_follows_the_scroll() {
-        let g = Geometry::compute(560, 470);
+        let g = Geometry::compute(wlrix_ui::palette::DEFAULT, 560, 470);
         // A cell scrolled up out of the viewport is no longer where it was.
         let cols = g.columns();
         let index = (cols * 3) as usize; // three rows down
@@ -337,14 +340,14 @@ mod tests {
 
     #[test]
     fn clicks_outside_the_grid_hit_nothing() {
-        let g = Geometry::compute(560, 470);
+        let g = Geometry::compute(wlrix_ui::palette::DEFAULT, 560, 470);
         assert_eq!(g.icon_at(g.name_field.x, g.name_field.y, 10, 0), None);
     }
 
     #[test]
     fn the_password_row_exists_before_it_is_shown() {
         // Reserved from the start, so revealing it does not move anything.
-        let g = Geometry::compute(560, 470);
+        let g = Geometry::compute(wlrix_ui::palette::DEFAULT, 560, 470);
         assert!(g.password_field.h > 0);
         assert!(g.password_field.top() > g.name_field.top());
         assert!(g.password_field.bottom() <= g.login_button.top());

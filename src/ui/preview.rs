@@ -32,12 +32,36 @@ use wayland_client::{
     protocol::{wl_output::WlOutput, wl_seat::WlSeat, wl_shm, wl_surface::WlSurface},
 };
 
-use crate::theme::font::Fonts;
-use crate::ui::canvas::Canvas;
 use crate::ui::dialog::{self, Model};
+use wlrix_ui::canvas::Canvas;
+use wlrix_ui::palette::Palette;
+use wlrix_ui::text::Fonts;
+
+/// Paint `model` into a fresh buffer and hand back the pixels, without a compositor.
+///
+/// The other half of this harness. [`show`] needs a Wayland connection and a pair of eyes;
+/// this needs neither, which is what lets a change to the drawing be diffed against the
+/// frame before it rather than eyeballed. `Argb8888`, `width * height * 4` bytes.
+pub fn render(
+    model: &Model,
+    palette: &Palette,
+    width: i32,
+    height: i32,
+) -> Result<Vec<u8>, String> {
+    let mut fonts = Fonts::load()?;
+    let mut pixels = vec![0u8; (width * height * 4) as usize];
+    let mut canvas = Canvas::new(&mut pixels, width, height);
+    dialog::paint(&mut canvas, palette, &mut fonts, model);
+    Ok(pixels)
+}
 
 /// Show `model` in a window of `width` x `height` until it is closed.
-pub fn show(model: Model, width: u32, height: u32) -> Result<(), String> {
+pub fn show(
+    model: Model,
+    palette: &'static Palette,
+    width: u32,
+    height: u32,
+) -> Result<(), String> {
     let fonts = Fonts::load()?;
 
     let conn = Connection::connect_to_env()
@@ -64,6 +88,7 @@ pub fn show(model: Model, width: u32, height: u32) -> Result<(), String> {
     window.commit();
 
     let mut preview = Preview {
+        palette,
         registry_state: RegistryState::new(&globals),
         output_state: OutputState::new(&globals, &qh),
         seat_state: SeatState::new(&globals, &qh),
@@ -97,6 +122,7 @@ struct Preview {
     width: u32,
     height: u32,
     fonts: Fonts,
+    palette: &'static Palette,
     model: Model,
     exit: bool,
 }
@@ -115,7 +141,7 @@ impl Preview {
         };
 
         let mut canvas = Canvas::new(pixels, width as i32, height as i32);
-        dialog::paint(&mut canvas, &mut self.fonts, &self.model);
+        dialog::paint(&mut canvas, self.palette, &mut self.fonts, &self.model);
 
         let surface = self.window.wl_surface();
         surface.damage_buffer(0, 0, width as i32, height as i32);

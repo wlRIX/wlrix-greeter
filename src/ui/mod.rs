@@ -15,12 +15,10 @@
 //! blink and scroll auto-repeat are timers alongside the Wayland source -- and greetd's
 //! replies will slot in the same way.
 
-pub mod canvas;
 pub mod dialog;
 pub mod icons;
 pub mod input;
 pub mod layout;
-pub mod motif;
 pub mod preview;
 
 use std::time::Duration;
@@ -66,13 +64,14 @@ use wayland_client::{
 };
 
 use crate::greetd::{Greetd, QuestionKind};
-use crate::theme::font::Fonts;
-use crate::theme::{Rgb, palette};
-use crate::ui::canvas::Canvas;
 use crate::ui::dialog::{Focus, Model};
 use crate::ui::input::{Action, Input, Key};
 use crate::ui::layout::Geometry;
 use crate::worker::{self, Command, Reply};
+use wlrix_ui::Rgb;
+use wlrix_ui::canvas::Canvas;
+use wlrix_ui::palette::Palette;
+use wlrix_ui::text::Fonts;
 
 /// The dialog's fixed size, in logical pixels.
 const DIALOG_W: u32 = 560;
@@ -125,6 +124,9 @@ pub struct Greeter {
     pointer: Option<WlPointer>,
 
     fonts: Fonts,
+    /// The color scheme everything is drawn in. Chosen once, from `--palette`: the greeter
+    /// is a short-lived screen started fresh per login, so there is nothing to reload into.
+    palette: &'static Palette,
     model: Model,
     input: Input,
     worker: worker::Handle,
@@ -141,7 +143,11 @@ pub struct Greeter {
 ///
 /// `session` is what a successful login starts, and `username` pre-fills the field when
 /// greetd named a user for us.
-pub fn run(session: Vec<String>, username: Option<String>) -> Result<(), String> {
+pub fn run(
+    session: Vec<String>,
+    username: Option<String>,
+    palette: &'static Palette,
+) -> Result<(), String> {
     // Connect to greetd first: a greeter that cannot authenticate is not worth showing,
     // and this fails the same way the terminal face does, before any window or font.
     let greetd = Greetd::connect()?;
@@ -205,6 +211,7 @@ pub fn run(session: Vec<String>, username: Option<String>) -> Result<(), String>
         layer_shell,
         pool,
         loop_handle: loop_handle.clone(),
+        palette,
         backdrops: Vec::new(),
         window,
         dialog_w: DIALOG_W,
@@ -346,7 +353,7 @@ impl Greeter {
         ) else {
             return;
         };
-        fill(canvas, palette::LOGIN_BACKGROUND);
+        fill(canvas, self.palette.login_background);
         let layer = self.backdrops[index].layer.wl_surface();
         layer.damage_buffer(0, 0, width as i32, height as i32);
         if buffer.attach_to(layer).is_ok() {
@@ -367,7 +374,7 @@ impl Greeter {
             return;
         };
         let mut canvas = Canvas::new(pixels, width as i32, height as i32);
-        dialog::paint(&mut canvas, &mut self.fonts, &self.model);
+        dialog::paint(&mut canvas, self.palette, &mut self.fonts, &self.model);
 
         let surface = self.window.wl_surface();
         surface.damage_buffer(0, 0, width as i32, height as i32);
@@ -463,7 +470,11 @@ impl Greeter {
         let token = self.loop_handle.insert_source(
             Timer::from_duration(REPEAT_DELAY),
             move |_, _, greeter| {
-                let g = Geometry::compute(greeter.dialog_w as i32, greeter.dialog_h as i32);
+                let g = Geometry::compute(
+                    greeter.palette,
+                    greeter.dialog_w as i32,
+                    greeter.dialog_h as i32,
+                );
                 if input::repeat_arrow(&mut greeter.model, &g, up) {
                     greeter.request_redraw();
                     TimeoutAction::ToDuration(REPEAT_INTERVAL)
@@ -487,15 +498,20 @@ impl Greeter {
     /// The pointer position in dialog coordinates. The toplevel surface is the dialog,
     /// so surface coordinates already are dialog coordinates.
     fn geometry(&self) -> Geometry {
-        Geometry::compute(self.dialog_w as i32, self.dialog_h as i32)
+        Geometry::compute(self.palette, self.dialog_w as i32, self.dialog_h as i32)
     }
 }
 
 /// Paint every pixel of a raw buffer one color.
+///
+/// Not [`wlrix_ui::Canvas::clear`]: the backdrop is a bare `wl_shm` buffer with no drawing
+/// on it at all, and wrapping it in a canvas to fill it once would be the only reason that
+/// canvas existed.
 fn fill(canvas: &mut [u8], color: Rgb) {
     let bytes = color.0.to_ne_bytes();
-    for pixel in canvas.chunks_exact_mut(4) {
-        pixel.copy_from_slice(&bytes);
+    // The remainder is discarded: a `wl_shm` buffer is whole pixels by construction.
+    for pixel in canvas.as_chunks_mut::<4>().0 {
+        *pixel = bytes;
     }
 }
 

@@ -7,10 +7,11 @@
 //! grid its shape. Real icons drop in at [`for_user`] without the rest of the UI
 //! noticing.
 
-use crate::theme::{Rgb, palette};
-use crate::ui::canvas::{Canvas, Rect};
-use crate::ui::motif::{self, Bevel};
 use crate::users::User;
+use wlrix_ui::Rgb;
+use wlrix_ui::canvas::{Canvas, Rect};
+use wlrix_ui::motif::{self, Bevel};
+use wlrix_ui::palette::Palette;
 
 /// The drawn size of a user icon, in logical pixels. Roughly IRIX's.
 pub const ICON_SIZE: i32 = 64;
@@ -36,18 +37,18 @@ pub fn for_user(user: &User) -> Icon {
 }
 
 /// Draw `icon` filling `rect` (expected to be [`ICON_SIZE`] square).
-pub fn draw(canvas: &mut Canvas, rect: Rect, icon: &Icon) {
+pub fn draw(canvas: &mut Canvas, palette: &Palette, rect: Rect, icon: &Icon) {
     // A raised tile, like a small button, so the emblem sits on something.
     motif::panel(
         canvas,
         rect,
-        palette::FACE,
-        Bevel::raised(palette::FACE_TOP_SHADOW, palette::FACE_BOTTOM_SHADOW, 2),
+        palette.face,
+        Bevel::raised(palette.face_top_shadow, palette.face_bottom_shadow, 2),
     );
     let inner = rect.inset(2);
     match icon {
         Icon::Root => draw_keyring(canvas, inner),
-        Icon::Workstation => draw_workstation(canvas, inner),
+        Icon::Workstation => draw_workstation(canvas, palette, inner),
     }
 }
 
@@ -73,14 +74,14 @@ fn draw_keyring(canvas: &mut Canvas, r: Rect) {
 }
 
 /// A little monitor on a stand, the generic-user look.
-fn draw_workstation(canvas: &mut Canvas, r: Rect) {
+fn draw_workstation(canvas: &mut Canvas, palette: &Palette, r: Rect) {
     const CASE: Rgb = Rgb(0xff_d0d0d0);
     const SCREEN: Rgb = Rgb(0xff_384858);
-    const OUTLINE: Rgb = palette::OUTER_LINE;
+    let outline = palette.outer_line;
 
     let mon = Rect::new(r.x + r.w / 6, r.y + r.h / 6, r.w * 2 / 3, r.h / 2);
     canvas.fill_rect(mon, CASE);
-    canvas.stroke_rect(mon, OUTLINE);
+    canvas.stroke_rect(mon, outline);
     canvas.fill_rect(mon.inset(4), SCREEN);
 
     // A neck and base under it.
@@ -88,7 +89,7 @@ fn draw_workstation(canvas: &mut Canvas, r: Rect) {
     canvas.fill_rect(neck, CASE);
     let base = Rect::new(r.x + r.w / 3, neck.bottom(), r.w / 3, 4);
     canvas.fill_rect(base, CASE);
-    canvas.stroke_rect(base, OUTLINE);
+    canvas.stroke_rect(base, outline);
 }
 
 /// A rough filled ring, centered on `(cx, cy)` with the given outer `radius`.
