@@ -110,7 +110,7 @@ fn run(
             Command::Begin { username } => {
                 // On a retry, clear whatever greetd was holding before starting fresh: a
                 // rejection does not always leave it ready for a new `CreateSession`, and
-                // cancelling nothing is harmless. This is what lets a login be tried
+                // canceling nothing is harmless. This is what lets a login be tried
                 // again after a wrong password.
                 if attempted {
                     let _ = greetd.cancel();

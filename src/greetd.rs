@@ -217,7 +217,7 @@ impl Greetd {
                 Step::Ask(question) => {
                     let Some(reply) = answer(&question) else {
                         self.cancel()?;
-                        return Ok(Outcome::Denied("cancelled".to_string()));
+                        return Ok(Outcome::Denied("canceled".to_string()));
                     };
                     step = self.answer(Some(reply))?;
                 }
@@ -432,7 +432,7 @@ mod tests {
 
     #[test]
     fn giving_up_cancels_rather_than_leaving_the_attempt_open() {
-        // greetd allows one attempt at a time, so abandoning without cancelling would
+        // greetd allows one attempt at a time, so abandoning without canceling would
         // block every later login.
         let (mut greetd, server) = scripted(vec![
             ask(AuthMessageType::Secret, "Password: "),

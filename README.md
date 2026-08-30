@@ -26,7 +26,7 @@ rather than presenting a login it cannot complete.
 |--------------------------|----------------------------------------------------------------------------|
 | `--user <name>`          | log this user in without asking who                                        |
 | `--session <command>...` | what to start (default: `start-wlrix`); takes the rest of the line         |
-| `--palette <name>`       | colour scheme: `classic` (default), `classic-g10`, `classic-g24`, `gotham` |
+| `--palette <name>`       | color scheme: `classic` (default), `classic-g10`, `classic-g24`, `gotham`  |
 | `-h`, `--help`           | usage                                                                      |
 
 `--palette` has to come *before* `--session`, which takes the rest of the line.

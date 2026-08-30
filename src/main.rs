@@ -80,7 +80,7 @@ fn parse_args() -> Result<Args, String> {
                      Options:\n  \
                        --user <name>           log this user in without asking who\n  \
                        --text                  use the terminal prompts, not the graphical screen\n  \
-                       --palette <name>        colour scheme: classic (default), classic-g10,\n  \
+                       --palette <name>        color scheme: classic (default), classic-g10,\n  \
                                                classic-g24, gotham\n  \
                        --session <command>...  what to start (default: {DEFAULT_SESSION});\n  \
                                                takes the rest of the line\n  \
