@@ -13,7 +13,7 @@ calloop = "0.13"
 # Pinned by rev rather than taken by path, so this repo still builds from a fresh standalone
 # clone. `just link-ui` in `wlrix-epoch` patches in a sibling checkout while working on both
 # sides at once.
-wlrix-ui = { git = "https://github.com/wlRIX/wlrix-ui", rev = "39d751da2b39a6bc45056907cb281bcc58dd5244" }
+wlrix-ui = { git = "https://github.com/wlRIX/wlrix-ui", rev = "027d64ff3ce14aae345c6a3953c9c1ef45a132eb" }
 # The user pictures. Not `wlrix-ui`'s decoder, which reads PNG only: an account picture is
 # often the JPEG a `~/.face` holds. The same crate and features `wlrix-lock` reads the same
 # files with -- PNG and JPEG are what AccountsService and `~/.face` hold in practice.

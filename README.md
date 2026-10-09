@@ -182,10 +182,9 @@ settings panels write.
 
 **Everyone else** shows IRIX's figure at a workstation, `assets/default-user.png`, and there **only the white body
 changes.** At rest it is a 50% checkerboard of white and the palette's rest gray; under the pointer it is solid white;
-selected, solid lamp yellow. The black outline and the gray shadow are identical in all three. That is deliberately not
-the multiply `wlrix-desktop` tints its icons with, which turned the shadow olive under yellow and flattened the stipple
-into one gray. The three colors are the desktop's, so a selected user here and a selected file there are the same
-yellow.
+selected, solid lamp yellow. The black outline and the gray shadow are identical in all three. The rule is `wlrix-ui`'s
+`icon_state`, the same one the desktop's icons follow, so a selected user here and a selected file there are the same
+yellow and change the same way.
 
 The picture is found as `wlrix-greeter/default-user.png` on the XDG data directories, which `just install` puts under
 the prefix, and then in the checkout's own `assets/`, so `just render` and `just preview` show it without an install.

@@ -9,15 +9,15 @@
 //! Interaction is a later stage. This draws whatever the model says, including a
 //! selection and a shown password field, so the preview can exercise those states.
 
-use crate::ui::icons::{self, Tint, UserIcons};
+use crate::ui::icons::{self, UserIcons};
 use crate::ui::layout::Geometry;
 use crate::users::User;
-use wlrix_ui::Rgb;
 use wlrix_ui::canvas::{Canvas, Rect};
 use wlrix_ui::motif::{self, Bevel};
 use wlrix_ui::palette::Palette;
 use wlrix_ui::text::{Face, Fonts, Run};
 use wlrix_ui::widget::{arrow, button, text_field};
+use wlrix_ui::{IconState, Rgb};
 
 /// Which field has the keyboard, and where the caret is drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -253,7 +253,7 @@ fn paint_list(
             icons::ICON_SIZE,
             icons::ICON_SIZE,
         );
-        let tint = Tint::of(index, model.selected, model.hovered);
+        let tint = IconState::of(model.selected == Some(index), model.hovered == Some(index));
         icons.draw(canvas, palette, icon_rect, user, tint);
 
         // The login name centered under the icon.

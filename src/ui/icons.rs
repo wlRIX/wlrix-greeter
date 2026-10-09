@@ -2,7 +2,8 @@
 //! The user pictures in the list.
 //!
 //! Two kinds, and IRIX showed their state two different ways -- both measured off the real login
-//! screen rather than guessed.
+//! screen rather than guessed, and both now [`wlrix_ui::icon_state`]'s, which the desktop's icons
+//! follow too.
 //!
 //! **A user with a picture of their own** shows it exactly as it is, in a frame: one black pixel
 //! around it at rest; under the pointer, two white ones -- that same pixel and the picture's own
@@ -10,14 +11,8 @@
 //!
 //! **Everyone else** shows the default picture, IRIX's figure at a workstation, and there **only
 //! the white body changes.** At rest it is a 50% checkerboard of white and the palette's rest
-//! gray (`#c9c9c9` in the classic schemes, exactly the gray IRIX stippled with); under the
-//! pointer it is solid white; selected, solid yellow. The black outline and the gray shadow
-//! under the figure are the same in all three.
-//!
-//! That is why neither is `Image::multiplied`, which `wlrix-desktop` tints its icons with:
-//! multiplying tints everything that is not black, so the shadow went olive under yellow and the
-//! rest state was a flat gray where IRIX had a stipple. The three colors are the desktop's,
-//! though, so a selected user here and a selected file there are the same yellow.
+//! gray; under the pointer it is solid white; selected, solid yellow. The black outline and the
+//! gray shadow under the figure are the same in all three.
 //!
 //! # Where the pictures come from
 //!
@@ -38,9 +33,9 @@ use std::path::{Path, PathBuf};
 
 use image::RgbaImage;
 use image::imageops::FilterType;
-use wlrix_ui::Rgb;
 use wlrix_ui::canvas::{Canvas, Rect};
 use wlrix_ui::palette::Palette;
+use wlrix_ui::{IconState, Rgb};
 
 use crate::users::User;
 
@@ -55,62 +50,6 @@ const DATA_SUBDIR: &str = "wlrix-greeter";
 /// The largest picture decoded, per axis. Account pictures are a few hundred pixels; a header
 /// claiming more than this is refused before anything is allocated. `wlrix-lock`'s limit.
 const MAX_DIMENSION: u32 = 4096;
-
-/// Which state a user's picture is in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Tint {
-    /// At rest.
-    Normal,
-    /// The pointer is over it.
-    Hover,
-    /// The chosen user.
-    Selected,
-}
-
-impl Tint {
-    /// The state of the user at `index`. Selection wins over hover, so the chosen user stays
-    /// yellow while the pointer crosses it rather than flicking to white.
-    pub fn of(index: usize, selected: Option<usize>, hovered: Option<usize>) -> Self {
-        if selected == Some(index) {
-            Tint::Selected
-        } else if hovered == Some(index) {
-            Tint::Hover
-        } else {
-            Tint::Normal
-        }
-    }
-
-    /// The color the default picture's white body takes at `(x, y)` of the picture.
-    ///
-    /// At rest that alternates pixel by pixel between white and the rest gray: the stipple
-    /// IRIX used to knock an icon back, on a checkerboard anchored to the picture.
-    pub fn body(self, palette: &Palette, x: i32, y: i32) -> Rgb {
-        match self {
-            Tint::Normal if (x + y) % 2 == 0 => Rgb(0xff_ffffff),
-            Tint::Normal => palette.icon_tint,
-            Tint::Hover => palette.icon_tint_hover,
-            Tint::Selected => palette.icon_tint_selected,
-        }
-    }
-
-    /// The color of the frame around a user's own picture.
-    pub fn frame(self, palette: &Palette) -> Rgb {
-        match self {
-            Tint::Normal => palette.outer_line,
-            Tint::Hover => palette.icon_tint_hover,
-            Tint::Selected => palette.icon_tint_selected,
-        }
-    }
-
-    /// How many pixels of frame there are, counted inward from one pixel outside the picture.
-    /// A highlighted frame is two: it takes the picture's outermost row as well.
-    fn frame_width(self) -> i32 {
-        match self {
-            Tint::Normal => 1,
-            Tint::Hover | Tint::Selected => 2,
-        }
-    }
-}
 
 /// The decoded pictures.
 pub struct UserIcons {
@@ -143,15 +82,15 @@ impl UserIcons {
         }
     }
 
-    /// Draw `user`'s picture filling `rect` (expected to be [`ICON_SIZE`] square), in `tint`'s
-    /// state. Nothing at all when there is no picture to draw.
+    /// Draw `user`'s picture filling `rect` (expected to be [`ICON_SIZE`] square), in state
+    /// `tint`. Nothing at all when there is no picture to draw.
     pub fn draw(
         &mut self,
         canvas: &mut Canvas,
         palette: &Palette,
         rect: Rect,
         user: &User,
-        tint: Tint,
+        tint: IconState,
     ) {
         let own = self
             .pictures
@@ -172,7 +111,13 @@ impl Default for UserIcons {
 }
 
 /// A user's own picture, as it is, in its frame.
-fn draw_own(canvas: &mut Canvas, palette: &Palette, rect: Rect, picture: &RgbaImage, tint: Tint) {
+fn draw_own(
+    canvas: &mut Canvas,
+    palette: &Palette,
+    rect: Rect,
+    picture: &RgbaImage,
+    tint: IconState,
+) {
     blit(canvas, rect, picture, |_, _, pixel| pixel);
     let color = tint.frame(palette);
     for ring in 0..tint.frame_width() {
@@ -180,16 +125,16 @@ fn draw_own(canvas: &mut Canvas, palette: &Palette, rect: Rect, picture: &RgbaIm
     }
 }
 
-/// The default picture, its white body in `tint`'s color.
+/// The default picture, its white body in state `tint`'s color.
 fn draw_default(
     canvas: &mut Canvas,
     palette: &Palette,
     rect: Rect,
     picture: &RgbaImage,
-    tint: Tint,
+    tint: IconState,
 ) {
     blit(canvas, rect, picture, |x, y, pixel| {
-        recolor(pixel, tint, palette, x, y)
+        tint.paint(palette, x, y, pixel)
     });
 }
 
@@ -211,18 +156,6 @@ fn blit(
         if a != 0 {
             canvas.blend(left + x, top + y, Rgb::from_channels(r, g, b), a);
         }
-    }
-}
-
-/// One pixel of the default picture in `tint`'s state: white becomes the body color at the same
-/// alpha, and everything else -- the outline and the shadow -- is left exactly as drawn.
-fn recolor(pixel: [u8; 4], tint: Tint, palette: &Palette, x: i32, y: i32) -> [u8; 4] {
-    match pixel {
-        [255, 255, 255, alpha] => {
-            let (r, g, b) = tint.body(palette, x, y).channels();
-            [r, g, b, alpha]
-        }
-        other => other,
     }
 }
 
@@ -356,14 +289,6 @@ mod tests {
     }
 
     #[test]
-    fn selection_wins_over_hover() {
-        assert_eq!(Tint::of(2, Some(2), Some(2)), Tint::Selected);
-        assert_eq!(Tint::of(2, Some(1), Some(2)), Tint::Hover);
-        assert_eq!(Tint::of(2, Some(1), Some(3)), Tint::Normal);
-        assert_eq!(Tint::of(0, None, None), Tint::Normal);
-    }
-
-    #[test]
     fn the_default_picture_is_found_at_its_own_size() {
         // The fallback a development build relies on, and a check that the artwork decodes --
         // it is 8-bit colormap, the kind of PNG that used to fail elsewhere in wlRIX.
@@ -381,43 +306,20 @@ mod tests {
             has(black) && has(shadow) && has([255; 4]),
             "the artwork's three colors"
         );
-        for tint in [Tint::Normal, Tint::Hover, Tint::Selected] {
+        for tint in [IconState::Normal, IconState::Hover, IconState::Selected] {
             for rgb in [black, shadow] {
-                assert_eq!(recolor(rgb, tint, palette, 0, 0), rgb, "{tint:?}");
-                assert_eq!(recolor(rgb, tint, palette, 1, 0), rgb, "{tint:?}");
+                assert_eq!(tint.paint(palette, 0, 0, rgb), rgb, "{tint:?}");
+                assert_eq!(tint.paint(palette, 1, 0, rgb), rgb, "{tint:?}");
             }
         }
         assert_eq!(
-            recolor([255; 4], Tint::Selected, palette, 0, 0),
+            IconState::Selected.paint(palette, 0, 0, [255; 4]),
             opaque(palette.icon_tint_selected)
         );
         assert_eq!(
-            recolor([255; 4], Tint::Hover, palette, 0, 0),
+            IconState::Hover.paint(palette, 0, 0, [255; 4]),
             opaque(palette.icon_tint_hover)
         );
-    }
-
-    #[test]
-    fn at_rest_the_body_is_a_checkerboard_of_white_and_the_rest_gray() {
-        let palette = palette();
-        let white = [255; 4];
-        assert_eq!(recolor(white, Tint::Normal, palette, 0, 0), white);
-        assert_eq!(recolor(white, Tint::Normal, palette, 1, 1), white);
-        assert_eq!(
-            recolor(white, Tint::Normal, palette, 1, 0),
-            opaque(palette.icon_tint)
-        );
-        assert_eq!(
-            recolor(white, Tint::Normal, palette, 0, 1),
-            opaque(palette.icon_tint)
-        );
-    }
-
-    #[test]
-    fn an_edge_of_the_body_keeps_its_alpha() {
-        let palette = palette();
-        let [_, _, _, alpha] = recolor([255, 255, 255, 0x80], Tint::Selected, palette, 0, 0);
-        assert_eq!(alpha, 0x80);
     }
 
     #[test]
@@ -427,7 +329,7 @@ mod tests {
         let red = Rgb::from_channels(0xc0, 0x20, 0x20);
         let picture = RgbaImage::from_pixel(96, 96, image::Rgba(opaque(red)));
         let rect = Rect::new(10, 10, ICON_SIZE, ICON_SIZE);
-        let at = |tint: Tint, x: i32, y: i32| {
+        let at = |tint: IconState, x: i32, y: i32| {
             let mut pixels = vec![0u8; 120 * 120 * 4];
             let mut canvas = Canvas::new(&mut pixels, 120, 120);
             canvas.fill_rect(Rect::new(0, 0, 120, 120), palette.list_background);
@@ -439,14 +341,14 @@ mod tests {
         let same = |a: Rgb, b: Rgb| a.channels() == b.channels();
 
         // At rest: the pixel just outside is black, and the picture is untouched to its edge.
-        assert!(same(at(Tint::Normal, 9, 50), palette.outer_line));
-        assert!(same(at(Tint::Normal, 10, 50), red));
-        assert!(same(at(Tint::Normal, 8, 50), palette.list_background));
+        assert!(same(at(IconState::Normal, 9, 50), palette.outer_line));
+        assert!(same(at(IconState::Normal, 10, 50), red));
+        assert!(same(at(IconState::Normal, 8, 50), palette.list_background));
 
         // Highlighted: that pixel and the picture's outermost row, and no further in.
         for (tint, color) in [
-            (Tint::Hover, palette.icon_tint_hover),
-            (Tint::Selected, palette.icon_tint_selected),
+            (IconState::Hover, palette.icon_tint_hover),
+            (IconState::Selected, palette.icon_tint_selected),
         ] {
             assert!(same(at(tint, 9, 50), color), "{tint:?}");
             assert!(same(at(tint, 10, 50), color), "{tint:?}");
