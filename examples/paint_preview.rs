@@ -26,6 +26,7 @@ fn user(name: &str, full: Option<&str>, uid: u32) -> User {
         name: name.to_string(),
         full_name: full.map(str::to_string),
         uid,
+        home: None,
     }
 }
 

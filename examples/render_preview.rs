@@ -23,6 +23,7 @@ fn user(name: &str, full: Option<&str>, uid: u32) -> User {
         name: name.to_string(),
         full_name: full.map(str::to_string),
         uid,
+        home: None,
     }
 }
 
@@ -43,7 +44,9 @@ fn main() {
     ]);
     // A selected user with the password row revealed: the state that exercises the most
     // surfaces at once -- the list, the scrollbar, both fields, the wordmark and the buttons.
+    // A second user under the pointer, so all three picture tints are in one frame.
     model.selected = Some(1);
+    model.hovered = Some(2);
     model.username = "vic485".into();
     model.full_name = Some("Victor Fugazzotto".into());
     model.focus = Focus::Username;

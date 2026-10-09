@@ -9,7 +9,7 @@
 //! Interaction is a later stage. This draws whatever the model says, including a
 //! selection and a shown password field, so the preview can exercise those states.
 
-use crate::ui::icons;
+use crate::ui::icons::{self, Tint, UserIcons};
 use crate::ui::layout::Geometry;
 use crate::users::User;
 use wlrix_ui::Rgb;
@@ -42,6 +42,8 @@ pub struct Model {
     pub users: Vec<User>,
     /// The highlighted user, if one is chosen.
     pub selected: Option<usize>,
+    /// The user under the pointer, drawn white. Not a choice: moving away clears it.
+    pub hovered: Option<usize>,
     /// The username field's contents.
     pub username: String,
     /// The full name shown beside the field.
@@ -71,6 +73,7 @@ impl Model {
         Self {
             users,
             selected: None,
+            hovered: None,
             username: String::new(),
             full_name: None,
             password: None,
@@ -92,7 +95,13 @@ const NAME_PX: f32 = 13.0;
 const WORDMARK_PX: f32 = 22.0;
 
 /// Draw the dialog into `canvas`, laid out to its size.
-pub fn paint(canvas: &mut Canvas, palette: &Palette, fonts: &mut Fonts, model: &Model) {
+pub fn paint(
+    canvas: &mut Canvas,
+    palette: &Palette,
+    fonts: &mut Fonts,
+    icons: &mut UserIcons,
+    model: &Model,
+) {
     let g = Geometry::compute(palette, canvas.width(), canvas.height());
 
     // The dialog itself: a raised panel with the black keyline around it.
@@ -108,7 +117,7 @@ pub fn paint(canvas: &mut Canvas, palette: &Palette, fonts: &mut Fonts, model: &
     );
     motif::outline(canvas, g.dialog, palette.outer_line);
 
-    paint_list(canvas, palette, fonts, &g, model);
+    paint_list(canvas, palette, fonts, icons, &g, model);
     paint_scrollbar(canvas, palette, &g, model);
     paint_fields(canvas, palette, fonts, &g, model);
     paint_footer(canvas, palette, fonts, &g, model);
@@ -216,6 +225,7 @@ fn paint_list(
     canvas: &mut Canvas,
     palette: &Palette,
     fonts: &mut Fonts,
+    icons: &mut UserIcons,
     g: &Geometry,
     model: &Model,
 ) {
@@ -243,13 +253,8 @@ fn paint_list(
             icons::ICON_SIZE,
             icons::ICON_SIZE,
         );
-        // The yellow selection ring goes behind the icon.
-        if model.selected == Some(index) {
-            let ring = icon_rect.inset(-3);
-            canvas.fill_rect(ring, palette.select_fill);
-            canvas.stroke_rect(ring, palette.outer_line);
-        }
-        icons::draw(canvas, palette, icon_rect, &icons::for_user(user));
+        let tint = Tint::of(index, model.selected, model.hovered);
+        icons.draw(canvas, palette, icon_rect, user, tint);
 
         // The login name centered under the icon.
         let label_w = fonts.width(Face::Regular, TEXT_PX, &user.name);

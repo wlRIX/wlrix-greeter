@@ -33,6 +33,7 @@ use wayland_client::{
 };
 
 use crate::ui::dialog::{self, Model};
+use crate::ui::icons::UserIcons;
 use wlrix_ui::canvas::Canvas;
 use wlrix_ui::palette::Palette;
 use wlrix_ui::text::Fonts;
@@ -51,7 +52,13 @@ pub fn render(
     let mut fonts = Fonts::load()?;
     let mut pixels = vec![0u8; (width * height * 4) as usize];
     let mut canvas = Canvas::new(&mut pixels, width, height);
-    dialog::paint(&mut canvas, palette, &mut fonts, model);
+    dialog::paint(
+        &mut canvas,
+        palette,
+        &mut fonts,
+        &mut UserIcons::new(),
+        model,
+    );
     Ok(pixels)
 }
 
@@ -98,6 +105,7 @@ pub fn show(
         width,
         height,
         fonts,
+        icons: UserIcons::new(),
         model,
         exit: false,
     };
@@ -122,6 +130,7 @@ struct Preview {
     width: u32,
     height: u32,
     fonts: Fonts,
+    icons: UserIcons,
     palette: &'static Palette,
     model: Model,
     exit: bool,
@@ -141,7 +150,13 @@ impl Preview {
         };
 
         let mut canvas = Canvas::new(pixels, width as i32, height as i32);
-        dialog::paint(&mut canvas, self.palette, &mut self.fonts, &self.model);
+        dialog::paint(
+            &mut canvas,
+            self.palette,
+            &mut self.fonts,
+            &mut self.icons,
+            &self.model,
+        );
 
         let surface = self.window.wl_surface();
         surface.damage_buffer(0, 0, width as i32, height as i32);

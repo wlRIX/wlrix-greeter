@@ -76,6 +76,7 @@ What lands:
 | `/etc/pam.d/wlrix-greeter`         | the stack that authenticates whoever logs in |
 | `/etc/pam.d/wlrix-greeter-greeter` | the stack for the greeter's own session      |
 | `/etc/greetd/wlrix-greeter.toml`   | greetd configuration                         |
+| `$prefix/share/wlrix-greeter/…`    | the default user picture                     |
 
 `install` never touches `/etc/greetd/config.toml`: that file is the administrator's, and may already point at another
 greeter.
@@ -164,7 +165,31 @@ copied that copy, and the two drifted.
 It is a **git dependency pinned by rev**, not a path dependency, so this repo still builds from a fresh standalone
 clone. `just link-ui` in `wlrix-epoch` patches in a sibling checkout for working on both sides at once.
 
-What stayed here: the drawn keyring and workstation icons, which are artwork rather than chrome.
+## User pictures
+
+Two kinds, and IRIX showed their state two different ways. Both were measured off the real login screen rather than
+guessed.
+
+**A user with a picture of their own** shows it exactly as it is, in a frame: one black pixel around it at rest; under
+the pointer, two white ones — that pixel and the picture's own outermost row; selected, the same two in lamp yellow. The
+picture is the first of `~/.face.icon`, `~/.face` and `/var/lib/AccountsService/icons/<login>` that decodes — the places
+`wlrix-lock` looks, in its order — center-cropped to a square. PNG and JPEG, through the same `image` crate and features
+the lock uses. Only regular files are read, so a `~/.face` that points at a FIFO cannot hang the login screen.
+
+The greeter runs as its own account, so a home directory that is not world-readable (`0700`, the default on several
+distributions) hides `~/.face` from it. The AccountsService copy is what it finds then — the one KDE's and GNOME's
+settings panels write.
+
+**Everyone else** shows IRIX's figure at a workstation, `assets/default-user.png`, and there **only the white body
+changes.** At rest it is a 50% checkerboard of white and the palette's rest gray; under the pointer it is solid white;
+selected, solid lamp yellow. The black outline and the gray shadow are identical in all three. That is deliberately not
+the multiply `wlrix-desktop` tints its icons with, which turned the shadow olive under yellow and flattened the stipple
+into one gray. The three colors are the desktop's, so a selected user here and a selected file there are the same
+yellow.
+
+The picture is found as `wlrix-greeter/default-user.png` on the XDG data directories, which `just install` puts under
+the prefix, and then in the checkout's own `assets/`, so `just render` and `just preview` show it without an install.
+With neither, a user without a picture of their own shows their name alone.
 
 The interesting part of a greeter is the conversation — how many rounds, what is sent when an answer is refused, what
 happens on a wrong password — and none of that is checked by compiling.

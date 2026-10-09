@@ -15,7 +15,7 @@
 // `list`/`list_from` read the real files; the UI reaches for them in a later stage.
 #![allow(dead_code)]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// A person the login screen can offer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,6 +26,43 @@ pub struct User {
     /// name IRIX gave it, in place of an empty one.
     pub full_name: Option<String>,
     pub uid: u32,
+    /// The home directory, for `~/.face`. `None` when the entry gives none.
+    pub home: Option<PathBuf>,
+}
+
+impl User {
+    /// Where this user's own picture might be, most specific first.
+    ///
+    /// The same three places, in the same order, as `wlrix-lock/src/user.rs`, kept in step by
+    /// hand: `~/.face.icon` before `~/.face` because that is the order KDE reads them in, and KDE
+    /// is the desktop that writes both; AccountsService last, because it is the system's copy and
+    /// a user who put a file in their own home meant that one.
+    ///
+    /// **The greeter runs as its own account**, so a home directory that is not world-readable
+    /// -- `0700`, the default on several distributions -- hides `~/.face` from it, and the
+    /// AccountsService copy is what it finds. That is the copy KDE's and GNOME's settings panels
+    /// write, which is why it is on the list at all.
+    pub fn picture_candidates(&self) -> Vec<PathBuf> {
+        picture_candidates(self.home.as_deref(), &self.name)
+    }
+}
+
+/// Where AccountsService keeps account pictures, one file per login name.
+const ACCOUNTS_SERVICE_ICONS: &str = "/var/lib/AccountsService/icons";
+
+/// See [`User::picture_candidates`].
+fn picture_candidates(home: Option<&Path>, login: &str) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    if let Some(home) = home {
+        paths.push(home.join(".face.icon"));
+        paths.push(home.join(".face"));
+    }
+    // A login name with a slash in it cannot exist, but the path is built from it, so refuse
+    // rather than trust that.
+    if !login.contains('/') && login != "." && login != ".." {
+        paths.push(Path::new(ACCOUNTS_SERVICE_ICONS).join(login));
+    }
+    paths
 }
 
 /// The UID range humans live in when `/etc/login.defs` says nothing.
@@ -73,6 +110,7 @@ pub fn parse_passwd(text: &str, uid_min: u32, uid_max: u32) -> Vec<User> {
             full_name: full_name(&entry.gecos, entry.uid),
             name: entry.name,
             uid: entry.uid,
+            home: (!entry.home.is_empty()).then(|| PathBuf::from(entry.home)),
         })
         .collect()
 }
@@ -82,6 +120,7 @@ struct Entry {
     name: String,
     uid: u32,
     gecos: String,
+    home: String,
     shell: String,
 }
 
@@ -97,7 +136,7 @@ fn parse_entry(line: &str) -> Option<Entry> {
     let uid: u32 = fields.next()?.parse().ok()?;
     let _gid = fields.next()?;
     let gecos = fields.next()?;
-    let _home = fields.next()?;
+    let home = fields.next()?;
     let shell = fields.next().unwrap_or("");
 
     if name.is_empty() {
@@ -107,6 +146,7 @@ fn parse_entry(line: &str) -> Option<Entry> {
         name: name.to_string(),
         uid,
         gecos: gecos.to_string(),
+        home: home.to_string(),
         shell: shell.to_string(),
     })
 }
@@ -207,6 +247,20 @@ nobody:x:65534:65534:Nobody:/:/usr/bin/nologin
         let users = parse_passwd(PASSWD, 1000, 60000);
         let root = &users[0];
         assert_eq!(root.full_name.as_deref(), Some("Super-User"));
+    }
+
+    #[test]
+    fn the_home_directory_is_kept_for_the_picture() {
+        let users = parse_passwd(
+            "vic:x:1000:1000:Vic:/home/vic:/bin/bash\nnohome:x:1001:1001:::/bin/sh\n",
+            1000,
+            60000,
+        );
+        assert_eq!(users[0].home.as_deref(), Some(Path::new("/home/vic")));
+        assert_eq!(
+            users[1].home, None,
+            "an empty field is no home, not the current directory"
+        );
     }
 
     #[test]

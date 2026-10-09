@@ -47,6 +47,11 @@ greeter-pam-dst := etc-dir / 'pam.d' / name + '-greeter'
 greetd-src := name + '.toml'
 greetd-dst := etc-dir / 'greetd' / name + '.toml'
 
+# The default user picture, found by name on the XDG data directories -- the way the compositor
+# finds its minimized-window pictures. Under `share`, because it is architecture-independent data.
+picture-src := 'assets' / 'default-user.png'
+picture-dst := base-dir / 'share' / name / 'default-user.png'
+
 default:
   @just --list
 
@@ -102,8 +107,10 @@ install:
   # Beside greetd's own config rather than over it: config.toml belongs to the administrator,
   # and may already be pointing at another greeter.
   install -Dm0644 '{{greetd-src}}' '{{greetd-dst}}'
+  install -Dm0644 '{{picture-src}}' '{{picture-dst}}'
   for f in '{{bin-dst}}' '{{start-dst}}' '{{sysusers-dst}}' '{{tmpfiles-dst}}' \
-           '{{service-dst}}' '{{pam-dst}}' '{{greeter-pam-dst}}' '{{greetd-dst}}'; do
+           '{{service-dst}}' '{{pam-dst}}' '{{greeter-pam-dst}}' '{{greetd-dst}}' \
+           '{{picture-dst}}'; do
       echo "installed $f"
   done
   echo
@@ -128,7 +135,9 @@ uninstall:
   #!/usr/bin/env bash
   set -euo pipefail
   rm -f '{{bin-dst}}' '{{start-dst}}' '{{sysusers-dst}}' '{{tmpfiles-dst}}' \
-        '{{service-dst}}' '{{pam-dst}}' '{{greeter-pam-dst}}' '{{greetd-dst}}'
+        '{{service-dst}}' '{{pam-dst}}' '{{greeter-pam-dst}}' '{{greetd-dst}}' \
+        '{{picture-dst}}'
+  rmdir --ignore-fail-on-non-empty "$(dirname '{{picture-dst}}')" 2>/dev/null || true
   echo "removed the greeter and its setup files"
   echo "the wlrix-greeter account and /var/lib/wlrix-greeter are left alone"
 

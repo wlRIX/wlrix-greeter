@@ -65,6 +65,7 @@ use wayland_client::{
 
 use crate::greetd::{Greetd, QuestionKind};
 use crate::ui::dialog::{Focus, Model};
+use crate::ui::icons::UserIcons;
 use crate::ui::input::{Action, Input, Key};
 use crate::ui::layout::Geometry;
 use crate::worker::{self, Command, Reply};
@@ -124,6 +125,7 @@ pub struct Greeter {
     pointer: Option<WlPointer>,
 
     fonts: Fonts,
+    icons: UserIcons,
     /// The color scheme everything is drawn in. Chosen once, from `--palette`: the greeter
     /// is a short-lived screen started fresh per login, so there is nothing to reload into.
     palette: &'static Palette,
@@ -219,6 +221,7 @@ pub fn run(
         keyboard: None,
         pointer: None,
         fonts,
+        icons: UserIcons::new(),
         model,
         input: Input::default(),
         worker,
@@ -374,7 +377,13 @@ impl Greeter {
             return;
         };
         let mut canvas = Canvas::new(pixels, width as i32, height as i32);
-        dialog::paint(&mut canvas, self.palette, &mut self.fonts, &self.model);
+        dialog::paint(
+            &mut canvas,
+            self.palette,
+            &mut self.fonts,
+            &mut self.icons,
+            &self.model,
+        );
 
         let surface = self.window.wl_surface();
         surface.damage_buffer(0, 0, width as i32, height as i32);
@@ -756,10 +765,14 @@ impl PointerHandler for Greeter {
                     input::motion(&mut self.model, &mut self.input, &g, x, y);
                     self.request_redraw();
                 }
+                PointerEventKind::Leave { .. } => {
+                    input::leave(&mut self.model);
+                    self.request_redraw();
+                }
                 PointerEventKind::Axis { vertical, .. } => {
                     let delta = vertical.discrete;
                     if delta != 0 {
-                        input::wheel(&mut self.model, &g, delta);
+                        input::wheel(&mut self.model, &self.input, &g, delta);
                         self.request_redraw();
                     }
                 }

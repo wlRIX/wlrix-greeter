@@ -136,6 +136,7 @@ pub fn release(model: &mut Model, input: &mut Input, g: &Geometry, x: i32, y: i3
 /// The pointer moved to `(x, y)`.
 pub fn motion(model: &mut Model, input: &mut Input, g: &Geometry, x: i32, y: i32) {
     input.pointer = (x, y);
+    hover(model, g, x, y);
     // Dragging the thumb maps the pointer's position in the track onto the scroll range.
     if let Some(grab) = input.thumb_grab {
         let track = g.scroll_track();
@@ -147,9 +148,35 @@ pub fn motion(model: &mut Model, input: &mut Input, g: &Geometry, x: i32, y: i32
     }
 }
 
+/// The pointer left the dialog: nothing is under it any more.
+pub fn leave(model: &mut Model) {
+    model.hovered = None;
+}
+
+/// Which user is under the pointer at `(x, y)`.
+///
+/// Through the same hit-test a click uses, so the user drawn white is the one a click there
+/// would choose -- and nothing is, while the error dialog covers the list.
+fn hover(model: &mut Model, g: &Geometry, x: i32, y: i32) {
+    model.hovered = match g.hit(
+        x,
+        y,
+        model.users.len(),
+        model.scroll_y,
+        model.password.is_some(),
+        model.error.is_some(),
+    ) {
+        Widget::Icon(index) => Some(index),
+        _ => None,
+    };
+}
+
 /// A scroll wheel notch: positive `delta` scrolls down.
-pub fn wheel(model: &mut Model, g: &Geometry, delta: i32) {
+///
+/// The list moves under a pointer that stays put, so what it is over is worked out again.
+pub fn wheel(model: &mut Model, input: &Input, g: &Geometry, delta: i32) {
     scroll_by(model, g, delta.signum() * SCROLL_STEP);
+    hover(model, g, input.pointer.0, input.pointer.1);
 }
 
 /// A held scroll arrow repeated. Returns whether it can still scroll further, so the
@@ -282,6 +309,7 @@ mod tests {
                 name: format!("user{i}"),
                 full_name: Some(format!("User {i}")),
                 uid: 1000 + i,
+                home: None,
             })
             .collect();
         Model::new(users)
@@ -307,6 +335,53 @@ mod tests {
         assert_eq!(m.selected, Some(2));
         assert_eq!(m.username, "user2");
         assert_eq!(m.full_name.as_deref(), Some("User 2"));
+    }
+
+    #[test]
+    fn the_pointer_hovers_the_user_under_it_and_nothing_else() {
+        let (mut m, g, mut input) = (model(), geometry(), Input::default());
+        let cell = g.cell(3, 0);
+        motion(&mut m, &mut input, &g, cell.x + cell.w / 2, cell.y + 10);
+        assert_eq!(m.hovered, Some(3));
+        // Hovering is not choosing.
+        assert_eq!(m.selected, None);
+
+        // Off the list, onto the field: nothing is hovered.
+        let field = g.name_field;
+        motion(&mut m, &mut input, &g, field.x + 4, field.y + 4);
+        assert_eq!(m.hovered, None);
+
+        motion(&mut m, &mut input, &g, cell.x + cell.w / 2, cell.y + 10);
+        leave(&mut m);
+        assert_eq!(m.hovered, None, "leaving the dialog clears it");
+    }
+
+    #[test]
+    fn scrolling_moves_the_hover_to_whatever_is_now_under_the_pointer() {
+        let (mut m, g, mut input) = (model(), geometry(), Input::default());
+        let first = g.cell(0, 0);
+        motion(&mut m, &mut input, &g, first.x + first.w / 2, first.y + 10);
+        assert_eq!(m.hovered, Some(0));
+        wheel(&mut m, &input, &g, 1);
+        assert_ne!(m.scroll_y, 0, "the list is long enough to scroll");
+        assert_eq!(
+            m.hovered,
+            g.icon_at(
+                first.x + first.w / 2,
+                first.y + 10,
+                m.users.len(),
+                m.scroll_y
+            )
+        );
+    }
+
+    #[test]
+    fn nothing_is_hovered_under_the_error_dialog() {
+        let (mut m, g, mut input) = (model(), geometry(), Input::default());
+        m.error = Some("no".into());
+        let cell = g.cell(0, 0);
+        motion(&mut m, &mut input, &g, cell.x + cell.w / 2, cell.y + 10);
+        assert_eq!(m.hovered, None);
     }
 
     #[test]
@@ -475,11 +550,13 @@ mod flow {
                 name: "root".into(),
                 full_name: Some("Super-User".into()),
                 uid: 0,
+                home: None,
             },
             User {
                 name: "vic485".into(),
                 full_name: Some("Victor".into()),
                 uid: 1000,
+                home: None,
             },
         ];
         let mut model = Model::new(users);
