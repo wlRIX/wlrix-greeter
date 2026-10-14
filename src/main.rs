@@ -124,10 +124,8 @@ fn main() -> std::process::ExitCode {
         // stop the login screen from coming up, because there is no way to fix it from a
         // machine that will not let you log in.
         let env = std::env::var("WLRIX_PALETTE").ok();
-        let (palette, unknown) = wlrix_ui::palette::resolve(choose_palette(
-            args.palette.as_deref(),
-            env.as_deref(),
-        ));
+        let (palette, unknown) =
+            wlrix_ui::palette::resolve(choose_palette(args.palette.as_deref(), env.as_deref()));
         if let Some(why) = unknown {
             eprintln!("wlrix-greeter: {why}; using {}", palette.id);
         }
@@ -211,7 +209,10 @@ mod tests {
 
     #[test]
     fn the_flag_wins_over_the_compositor() {
-        assert_eq!(choose_palette(Some("classic"), Some("gotham")), Some("classic"));
+        assert_eq!(
+            choose_palette(Some("classic"), Some("gotham")),
+            Some("classic")
+        );
     }
 
     #[test]
