@@ -31,19 +31,32 @@ rather than presenting a login it cannot complete.
 
 `--palette` has to come *before* `--session`, which takes the rest of the line.
 
-A flag rather than a config key, deliberately: the greeter reads no config file of its own. It runs before there is a
-user whose settings could be read, and its configuration is greetd's, root-owned under `/etc/greetd/` — which is the
-right place for this:
+## The login screen's settings
 
-```toml
-command = "wlrix-compositor -c 'wlrix-greeter --palette gotham'"
+The greeter reads no config file of its own: it runs before there is a user whose settings could be read. Its keyboard
+layout, color scheme and displays are the compositor's, and `wlrix-greeter-start` gives that compositor a file of its own:
+
+```sh
+wlrix-compositor --config /etc/wlrix/greeter.toml -c wlrix-greeter
 ```
 
-An unrecognized name logs a line and draws the default. A mistyped scheme must not stop the login screen from coming up,
-because there is no way to fix it from a machine that will not let you log in.
+`/etc/wlrix/greeter.toml` is a `compositor.toml` — the same sections, the same rules — and the **Login Settings** panel
+(`wlrix-settings-login`, in wlrix-apps) writes it, including copying the keyboard, scheme and displays of whoever is
+logged in. It can be edited by hand just as well; `wlrix-compositor --check-config` says whether an edit would be accepted.
+Until it exists the compositor falls back to `/etc/wlrix/compositor.toml`, so a fresh install comes up with the system's
+keyboard and pointer, and `install` does not create it.
 
-Note that this sets the *dialog's* scheme. The window chrome around it comes from `wlrix-compositor`, which reads
-`/etc/wlrix/compositor.toml` — set `[appearance] palette` there too, or the login screen comes up half-themed.
+Displays are `[[output]]` sections in that file. The compositor also keeps a saved-state file of output changes made over
+`wlr-output-management`, which wins field by field; under the greeter that is
+`/var/lib/wlrix-greeter/.local/state/wlrix/outputs.toml`, and nothing at the login screen writes it. If one is there from
+some earlier experiment, delete it, or it will override what the panel set.
+
+The compositor passes its `[appearance] palette` to the greeter in `WLRIX_PALETTE`, so the dialog and the frame around it
+are one setting. `--palette` overrides it, for running the greeter by hand; it cannot come through `-c`, which takes one
+program and no arguments.
+
+An unrecognized scheme name logs a line and draws the default. A mistyped scheme must not stop the login screen from
+coming up, because there is no way to fix it from a machine that will not let you log in.
 
 ## Installing
 
@@ -77,6 +90,8 @@ What lands:
 | `/etc/pam.d/wlrix-greeter-greeter` | the stack for the greeter's own session      |
 | `/etc/greetd/wlrix-greeter.toml`   | greetd configuration                         |
 | `$prefix/share/wlrix-greeter/…`    | the default user picture                     |
+
+`/etc/wlrix/greeter.toml` is not in the list: it is the administrator's, written by the Login Settings panel or by hand.
 
 `install` never touches `/etc/greetd/config.toml`: that file is the administrator's, and may already point at another
 greeter.

@@ -27,16 +27,7 @@ struct Args {
     /// default now that it can log in; the terminal face stays for a VT with no
     /// compositor, and as a fallback.
     text: bool,
-    /// Which color scheme to draw in.
-    ///
-    /// A flag rather than a config key, and deliberately: the greeter reads no config file
-    /// of its own -- it runs before there is a user whose settings could be read, and its
-    /// configuration is greetd's, root-owned under `/etc/greetd/`. That is the right place
-    /// for this, so greetd passes it:
-    ///
-    /// ```toml
-    /// command = "wlrix-compositor -c 'wlrix-greeter --palette gotham'"
-    /// ```
+    /// Which color scheme to draw in, overriding the compositor's. See [`choose_palette`].
     palette: Option<String>,
 }
 
@@ -101,6 +92,18 @@ fn parse_args() -> Result<Args, String> {
     })
 }
 
+/// The scheme to draw in: `--palette`, else the compositor's, else the default.
+///
+/// The greeter reads no config file of its own. It runs before there is a user whose settings
+/// could be read, and the login screen's settings are the compositor's: `wlrix-greeter-start`
+/// points it at `/etc/wlrix/greeter.toml`, and the compositor passes its `[appearance] palette`
+/// down in `WLRIX_PALETTE`. Taking it from there means the dialog and the frame around it are
+/// one setting, and cannot come up half-themed. `--palette` stays for running the greeter by
+/// hand; `-c` cannot pass it, since it takes one program and no arguments.
+fn choose_palette<'a>(flag: Option<&'a str>, env: Option<&'a str>) -> Option<&'a str> {
+    flag.or(env.filter(|name| !name.is_empty()))
+}
+
 fn main() -> std::process::ExitCode {
     let args = match parse_args() {
         Ok(args) => args,
@@ -120,7 +123,11 @@ fn main() -> std::process::ExitCode {
         // Resolve rather than reject: a mistyped scheme name in greetd's config must not
         // stop the login screen from coming up, because there is no way to fix it from a
         // machine that will not let you log in.
-        let (palette, unknown) = wlrix_ui::palette::resolve(args.palette.as_deref());
+        let env = std::env::var("WLRIX_PALETTE").ok();
+        let (palette, unknown) = wlrix_ui::palette::resolve(choose_palette(
+            args.palette.as_deref(),
+            env.as_deref(),
+        ));
         if let Some(why) = unknown {
             eprintln!("wlrix-greeter: {why}; using {}", palette.id);
         }
@@ -195,5 +202,26 @@ fn main() -> std::process::ExitCode {
                 return std::process::ExitCode::FAILURE;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::choose_palette;
+
+    #[test]
+    fn the_flag_wins_over_the_compositor() {
+        assert_eq!(choose_palette(Some("classic"), Some("gotham")), Some("classic"));
+    }
+
+    #[test]
+    fn the_compositor_scheme_is_used_without_a_flag() {
+        assert_eq!(choose_palette(None, Some("gotham")), Some("gotham"));
+    }
+
+    #[test]
+    fn an_empty_environment_is_no_scheme() {
+        assert_eq!(choose_palette(None, Some("")), None);
+        assert_eq!(choose_palette(None, None), None);
     }
 }
