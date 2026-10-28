@@ -17,6 +17,8 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::i18n::tr;
+
 /// A person the login screen can offer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct User {
@@ -73,7 +75,9 @@ const DEFAULT_UID_MIN: u32 = 1000;
 const DEFAULT_UID_MAX: u32 = 60000;
 
 /// What IRIX displayed for the otherwise-nameless super-user.
-const SUPER_USER: &str = "Super-User";
+fn super_user() -> &'static str {
+    tr("Super-User", "スーパーユーザ")
+}
 
 /// The users to offer, read from the usual files.
 ///
@@ -161,7 +165,7 @@ fn full_name(gecos: &str, uid: u32) -> Option<String> {
     if !name.is_empty() {
         Some(name.to_string())
     } else if uid == 0 {
-        Some(SUPER_USER.to_string())
+        Some(super_user().to_string())
     } else {
         None
     }

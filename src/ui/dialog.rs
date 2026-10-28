@@ -9,6 +9,7 @@
 //! Interaction is a later stage. This draws whatever the model says, including a
 //! selection and a shown password field, so the preview can exercise those states.
 
+use crate::i18n::tr;
 use crate::ui::icons::{self, UserIcons};
 use crate::ui::layout::Geometry;
 use crate::users::User;
@@ -324,7 +325,7 @@ fn paint_fields(
             baseline: label_baseline,
             color: palette.foreground,
         },
-        "Login name:",
+        tr("Login name:", "ログイン名:"),
     );
 
     text_field(
@@ -414,7 +415,7 @@ fn paint_footer(
         palette,
         fonts,
         g.login_button,
-        "Log In",
+        tr("Log In", "ログイン"),
         model.armed == Some(Button::Login),
     );
     button(
@@ -422,7 +423,7 @@ fn paint_footer(
         palette,
         fonts,
         g.help_button,
-        "Help",
+        tr("Help", "ヘルプ"),
         model.armed == Some(Button::Help),
     );
 }

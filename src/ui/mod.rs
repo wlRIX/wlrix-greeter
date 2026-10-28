@@ -64,6 +64,7 @@ use wayland_client::{
 };
 
 use crate::greetd::{Greetd, QuestionKind};
+use crate::i18n::tr;
 use crate::ui::dialog::{Focus, Model};
 use crate::ui::icons::UserIcons;
 use crate::ui::input::{Action, Input, Key};
@@ -76,6 +77,15 @@ use wlrix_ui::text::Fonts;
 
 /// The dialog's fixed size, in logical pixels.
 const DIALOG_W: u32 = 560;
+
+/// What a refused login says. The Japanese is the shorter of the two ways to put it so that it
+/// fits the error box's one line, which is sized for the English.
+fn cannot_log_in() -> &'static str {
+    tr(
+        "Cannot log in to this account.",
+        "このアカウントにログインできません。",
+    )
+}
 const DIALOG_H: u32 = 470;
 
 /// How long each half of the caret's blink lasts.
@@ -244,7 +254,13 @@ pub fn run(
                 // greeter that disappears strands whoever is at the keyboard.
                 ChannelEvent::Closed => {
                     if !greeter.exit {
-                        greeter.model.message = Some("lost the connection to greetd".to_string());
+                        greeter.model.message = Some(
+                            tr(
+                                "lost the connection to greetd",
+                                "greetd との接続が切れました",
+                            )
+                            .to_string(),
+                        );
                         greeter.phase = Phase::PickUser;
                         greeter.request_redraw();
                     }
@@ -454,12 +470,12 @@ impl Greeter {
                 // IRIX showed a modal box on a failed login rather than an inline note.
                 // The reason from PAM is deliberately not shown -- "which of username or
                 // password was wrong" is exactly what an attacker wants narrowed down.
-                self.model.error = Some("Cannot log in to this account.".to_string());
+                self.model.error = Some(cannot_log_in().to_string());
                 self.model.password = None;
                 self.phase = Phase::PickUser;
             }
             Reply::Broken(err) => {
-                self.model.error = Some(format!("Cannot log in to this account.\n{err}"));
+                self.model.error = Some(format!("{}\n{err}", cannot_log_in()));
                 self.model.password = None;
                 self.phase = Phase::PickUser;
             }
